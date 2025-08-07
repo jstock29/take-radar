@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Harper's Letter Radar",
+  "description": "Highlights signatories of the Harper's Letter on all websites.",
+  "version": "0.1.2",
+  "permissions": ["storage"],
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "action": { "default_popup": "options.html" }
+}
