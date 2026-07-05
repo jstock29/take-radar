@@ -1,5 +1,9 @@
 /* styles.css */
 .name-highlight {
-  background-color: rgb(138, 1, 1) !important;
-  color: white !important;
+    color: inherit !important;
+    padding: 0 2px;
+    border-radius: 2px;
+    cursor: help;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+    filter: brightness(0.9);
 }

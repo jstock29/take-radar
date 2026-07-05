@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Harper's Letter Radar",
-  "description": "Highlights signatories of the Harper's Letter on all websites.",
-  "version": "0.1.2",
+  "name": "Bad Take Radar",
+  "description": "Highlights signatories of the Harper's Letter and any other people who you think have bad takes on all websites.",
+  "version": "0.2.0",
   "permissions": ["storage"],
 
   "background": {
@@ -15,7 +15,8 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "css": ["styles.css"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
 
