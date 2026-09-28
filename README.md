@@ -16,4 +16,14 @@ Matching is forgiving so you don't have to list every spelling:
 - A middle initial is optional: `David Blight` matches `David W. Blight` and vice versa.
 - Only whole words match, so `Mia Bay` won't light up `Miami Bay`.
 
+## Releasing
+
+1. Bump `version` in `manifest.json`.
+2. Run `./scripts/package.sh`. It writes `dist/take-radar-<version>.zip` with only the files the extension needs.
+3. Upload the zip in the [Chrome Web Store developer dashboard](https://chrome.google.com/webstore/devconsole).
+
+## Privacy
+
+Take Radar collects nothing and makes no network requests. Your lists are stored locally in your browser (`chrome.storage.local`). It reads page text only to find matches, on the device.
+
 Built with AI. 
