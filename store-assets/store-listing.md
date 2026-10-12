@@ -1,13 +1,13 @@
-# Chrome Web Store listing: Bad Take Radar
+# Chrome Web Store listing: Take Radar
 
 ## Store listing tab
 
 **Summary** (taken from the manifest `description`, 132 characters max)
-> Highlights signatories of the Harper's Letter and any other people who you think have bad takes on all websites.
+> Highlights the people you're keeping an eye on, on every website you visit.
 
 **Description**
 
-Bad Take Radar highlights the people you're keeping an eye on, on every website you visit.
+Take Radar highlights the people you're keeping an eye on, on every website you visit.
 
 Make a list of names, for example columnists whose takes you'd rather skip, writers you always want to read, or anyone else. Each time one of those names appears on a page, it's highlighted in that list's style. Hover over a highlight to see which list it came from.
 
