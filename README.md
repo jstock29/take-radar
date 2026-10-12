@@ -1,4 +1,4 @@
-# Bad Take Radar
+# Take Radar
 
 Highlights names from your lists on every page you visit. Each list gets its
 own highlight style: a fill, an optional border, and opacity for both, so a
