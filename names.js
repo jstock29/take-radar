@@ -1,4 +1,5 @@
-export const names = [
+// The list seeded on first install.
+globalThis.TAKE_RADAR_DEFAULT_NAMES = [
   "Adam Hochschild",
   "Adaner Usmani",
   "Allison Stanger",
