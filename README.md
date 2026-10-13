@@ -50,6 +50,34 @@ Requires Safari 16.4 or later, because name matching uses regex lookbehind.
 `manifest.json`. Firefox 121+ reads `background.scripts` and ignores
 `service_worker`. Chrome does the reverse.
 
+## Publishing to the Chrome Web Store
+
+`.github/workflows/publish-chrome.yml` runs on every push to `main`. It
+checks syntax and builds the zip (`scripts/package.sh`, also saved as a
+workflow artifact). If `manifest.json`'s `version` has no `v<version>` tag
+yet, the workflow uploads that zip, submits it for review
+(`scripts/cws-publish.sh`) and then pushes the tag. **To release, bump
+`version` and push.**
+
+The API only handles the package. Listing text, screenshots and promo tiles
+live in `store-assets/`; when those files change, the workflow posts a
+reminder to update them in the dashboard by hand.
+
+One-time setup:
+
+1. In [Google Cloud Console](https://console.cloud.google.com), pick or
+   create a project and enable the **Chrome Web Store API**.
+2. Create a service account (it needs no roles), then create a JSON key for
+   it.
+3. In the [Developer Dashboard](https://chrome.google.com/webstore/devconsole),
+   open **Account** and add the service account's email.
+4. In GitHub → Settings → Secrets and variables → Actions:
+   - secret `CWS_SERVICE_ACCOUNT_KEY`: the JSON key's contents
+   - variable `CWS_PUBLISHER_ID`: from the dashboard's **Publisher → Settings**
+
+An upload fails while another version is still in review. Wait for that
+review to finish, or cancel it in the dashboard, then re-run the workflow.
+
 ## Storage format
 
 `storage.local` → `lists: [{ id, name, fill, border, borderWidth, names }]`,

@@ -1,0 +1,97 @@
+name: Publish to Chrome Web Store
+
+# Every push to main is checked and packaged. A new version is uploaded and
+# submitted for review only when manifest.json's version has no matching
+# v<version> git tag yet; the tag is created after a successful submission.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: chrome-web-store
+  cancel-in-progress: false
+
+permissions:
+  contents: write # to push the v<version> tag
+
+env:
+  CWS_EXTENSION_ID: ijehcepecdihklcfehpobebkdmbnelkg
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, and the diff for the listing-assets check
+
+      - name: Check syntax
+        run: |
+          jq empty manifest.json
+          for f in *.js; do
+            if grep -qE '^(import|export) ' "$f"; then
+              node --input-type=module --check < "$f"
+            else
+              node --check "$f"
+            fi
+          done
+
+      - name: Read version
+        id: version
+        run: |
+          version=$(jq -r .version manifest.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "v$version is already tagged. Bump \`version\` in manifest.json to publish." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package
+        id: package
+        run: echo "zip=$(scripts/package.sh)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: take-radar-${{ steps.version.outputs.version }}
+          path: ${{ steps.package.outputs.zip }}
+
+      - name: Authenticate to Google
+        if: steps.version.outputs.release == 'true'
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.CWS_SERVICE_ACCOUNT_KEY }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Upload and submit for review
+        if: steps.version.outputs.release == 'true'
+        id: publish
+        env:
+          CWS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+        run: scripts/cws-publish.sh "${{ steps.package.outputs.zip }}"
+
+      - name: Tag release
+        if: steps.version.outputs.release == 'true'
+        run: |
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+          echo "Submitted v${{ steps.version.outputs.version }} for review (state: ${{ steps.publish.outputs.state }})." >> "$GITHUB_STEP_SUMMARY"
+
+      # The API can't change listing text or images, so flag when they change.
+      - name: Flag listing changes
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: |
+          changed=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- store-assets || true)
+          if [ -n "$changed" ]; then
+            echo "::warning::Store listing assets changed. Update them by hand in the Chrome Web Store dashboard."
+            {
+              echo "### Store listing needs a manual update"
+              echo "The Chrome Web Store API can't change listing text or images. These files changed:"
+              echo "$changed" | sed 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
