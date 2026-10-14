@@ -58,14 +58,18 @@ jobs:
           name: take-radar-${{ steps.version.outputs.version }}
           path: ${{ steps.package.outputs.zip }}
 
+      # Exchanges the key for a token directly. (google-github-actions/auth with
+      # token_format: access_token would instead have the account impersonate
+      # itself, which needs an extra IAM role.)
       - name: Authenticate to Google
         if: steps.version.outputs.release == 'true'
         id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.CWS_SERVICE_ACCOUNT_KEY }}
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+        env:
+          CWS_SERVICE_ACCOUNT_KEY: ${{ secrets.CWS_SERVICE_ACCOUNT_KEY }}
+        run: |
+          token=$(node scripts/cws-token.mjs)
+          echo "::add-mask::$token"
+          echo "access_token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Upload and submit for review
         if: steps.version.outputs.release == 'true'
