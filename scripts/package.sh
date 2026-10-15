@@ -8,5 +8,5 @@ version=$(jq -r .version manifest.json)
 out="dist/take-radar-${version}.zip"
 mkdir -p dist
 rm -f "$out"
-zip -q -r -X "$out" manifest.json ./*.js ./*.html ./*.css icons -x '.*' '*/.*'
+zip -q -r -X "$out" manifest.json ./*.js ./*.html ./*.css icons lists -x '.*' '*/.*'
 echo "$out"

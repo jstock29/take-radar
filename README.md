@@ -3,18 +3,50 @@
 Highlights names from your lists on every page you visit. Each list gets its
 own highlight style: a fill, an optional border, and opacity for both, so a
 list can be a solid marker, a light tint, or just a box around the name.
+Hovering a highlight shows the list it came from and an optional note.
+
+- **Starter lists**, all opt-in: Republican operatives, Democratic
+  operatives, and the Harper's Letter signatories (see `lists/`).
+- **Lists from a URL**: point at a `.txt` or `.csv` file and it's re-checked
+  twice a day. The starter lists sync this way from this repo, so fixes to
+  them reach users without a new release.
+- **Toolbar badge** with the number of names on the current page.
+- **Pause** everywhere (switch in the panel, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>),
+  or turn it off for a single site.
+- Works inside **Shadow DOM** (web components, e.g. new Reddit), including
+  closed shadow roots in Chrome and Firefox.
 
 ## Files
 
 | File | What it does |
 | --- | --- |
 | `manifest.json` | MV3 manifest that works in Chrome, Safari and Firefox |
-| `shared.js` | Color math, list normalization and the highlight style, shared by every context |
-| `content.js` | Finds names on the page and wraps them in highlight spans |
-| `background.js` | Seeds the default list on install and upgrades older saved lists |
-| `names.js` | The default (Harper's Letter) list |
+| `shared.js` | List and settings shapes, list-file parsing, colors and the highlight style; shared by every context |
+| `matcher.js` | Finds names in text (accents, initials, middle initials); no DOM, so it's unit-tested |
+| `content.js` | Walks the page and its shadow roots, wraps matches in highlights, reports the count |
+| `background.js` | Install/upgrade, the toolbar badge, scheduled list refreshes, the pause shortcut |
 | `options.html/.css/.js` | The settings panel, used both as the toolbar popup and as a full-page options tab |
 | `color-picker.js` | The in-panel color picker (see below) |
+| `lists/` | The starter lists, bundled and synced from GitHub |
+| `tests/` | Unit tests (`npm test`) and end-to-end tests in Chromium (`npm run test:e2e`) |
+
+## List format
+
+One name per line. Anything after a `|` is a note shown in the tooltip, and
+lines starting with `#` are comments:
+
+```
+# My list
+Jane Doe | former campaign spokeswoman
+John Roe
+```
+
+A `.csv` with a header row uses the `name` column, plus a `note`, `notes`,
+`description` or `role` column if there is one. A CSV without a `name`
+header treats every cell as a name.
+
+To fix or add someone on a starter list, edit the file in `lists/` and
+merge to `main`; installed copies pick it up within 12 hours.
 
 ## Why a custom color picker
 
@@ -25,7 +57,8 @@ transparency. `color-picker.js` draws the picker inside the panel instead.
 
 ## Chrome / Edge / Brave
 
-`chrome://extensions` → Developer mode → **Load unpacked** → pick this folder.
+`chrome://extensions` → Developer mode → **Load unpacked** → pick this folder
+(or unzip the output of `npm run package` and load that).
 
 ## Safari (macOS / iOS)
 
@@ -42,7 +75,8 @@ Then go to **Settings → Developer** and turn on **Allow unsigned
 extensions**. Enable Take Radar under **Settings → Extensions** and grant
 it access to all websites.
 
-Requires Safari 16.4 or later, because name matching uses regex lookbehind.
+Requires Safari 16.4 or later. Closed shadow roots can't be read in Safari,
+so text inside them isn't highlighted there.
 
 ## Firefox
 
@@ -53,7 +87,8 @@ Requires Safari 16.4 or later, because name matching uses regex lookbehind.
 ## Publishing to the Chrome Web Store
 
 `.github/workflows/publish-chrome.yml` runs on every push to `main`. It
-checks syntax and builds the zip (`scripts/package.sh`, also saved as a
+runs the tests (`.github/workflows/test.yml`, which also runs on pull
+requests) and builds the zip (`scripts/package.sh`, also saved as a
 workflow artifact). If `manifest.json`'s `version` has no `v<version>` tag
 yet, the workflow uploads that zip, submits it for review
 (`scripts/cws-publish.sh`) and then pushes the tag. **To release, bump
@@ -78,9 +113,23 @@ One-time setup:
 An upload fails while another version is still in review. Wait for that
 review to finish, or cancel it in the dashboard, then re-run the workflow.
 
+## Development
+
+```sh
+npm install
+npm test            # unit tests
+npm run test:e2e    # loads the packaged extension in Chromium
+```
+
 ## Storage format
 
-`storage.local` → `lists: [{ id, name, fill, border, borderWidth, names }]`,
-where `fill` and `border` are `#rrggbbaa`. Lists saved by 0.3 had only a
-`color` field. They still load, and they're upgraded on the next install or
-update.
+`storage.local`:
+
+- `lists: [{ id, name, fill, border, borderWidth, names, starterId?, source? }]`.
+  `fill` and `border` are `#rrggbbaa`; `names` are lines in the list format
+  above; `source: { url, updatedAt, error }` marks a list synced from a URL.
+- `settings: { paused, disabledHosts }`.
+
+Lists saved by 0.3 had only a `color` field. They still load, and they're
+upgraded on the next install or update. Installs from before 0.5 keep their
+Harper's Letter list; new installs start with no lists.

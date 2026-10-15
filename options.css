@@ -27,6 +27,10 @@
 * {
   box-sizing: border-box;
 }
+/* Component display rules (flex, block) would otherwise override [hidden]. */
+[hidden] {
+  display: none !important;
+}
 body {
   width: 360px;
   margin: 0;
@@ -487,4 +491,219 @@ textarea {
 textarea:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* --- On/off ------------------------------------------------------------------ */
+
+.switch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 3px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.switch:hover {
+  background: var(--hover);
+}
+.switch-track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.switch[aria-checked="true"] .switch-track {
+  background: #34c759;
+}
+.switch[aria-checked="true"] .switch-thumb {
+  transform: translateX(12px);
+}
+.switch-label {
+  min-width: 42px;
+  text-align: left;
+}
+
+.site-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.site-row b {
+  color: var(--text);
+  font-weight: 600;
+  word-break: break-all;
+}
+body.paused #lists {
+  opacity: 0.55;
+}
+
+.link-btn {
+  flex: none;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
+.link-btn:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+
+/* --- Synced lists --------------------------------------------------------------- */
+
+.sync-info {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sync-info a {
+  color: inherit;
+}
+.sync-error {
+  margin-top: 2px;
+  color: var(--danger);
+}
+.sync-actions {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 0 -4px;
+}
+textarea.readonly {
+  color: var(--muted);
+}
+
+/* --- Starter lists ------------------------------------------------------------------ */
+
+.starters {
+  padding: 2px 2px 8px;
+}
+.starters .section-label {
+  margin-top: 6px;
+}
+.starter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.starter-text {
+  flex: 1;
+  min-width: 0;
+}
+.starter-name {
+  font-weight: 600;
+}
+.starter-desc {
+  color: var(--muted);
+  font-size: 12px;
+}
+.starter-add {
+  flex: none;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+  font-weight: 500;
+  cursor: pointer;
+}
+.starter-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Add from URL --------------------------------------------------------------------- */
+
+.url-form {
+  margin: 4px 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.url-form label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.url-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.url-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+.url-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.url-row button[type="submit"] {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.url-row button[type="submit"]:disabled {
+  opacity: 0.6;
+}
+.url-form .hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.url-error {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+.url-error:empty {
+  display: none;
 }

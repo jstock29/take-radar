@@ -65,14 +65,114 @@
 
   // --- Lists --------------------------------------------------------------
 
+  // --- Names and list files -------------------------------------------------
+  // A list entry is "Name" or "Name | note"; the note shows in the tooltip.
+
+  const splitEntry = (line) => {
+    const i = line.indexOf("|");
+    if (i === -1) return { name: line.trim(), note: "" };
+    return { name: line.slice(0, i).trim(), note: line.slice(i + 1).trim() };
+  };
+
+  // Split one CSV line, honoring double-quoted cells.
+  const csvCells = (line) => {
+    const cells = [];
+    let cell = "";
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (quoted) {
+        if (ch === '"' && line[i + 1] === '"') (cell += '"'), i++;
+        else if (ch === '"') quoted = false;
+        else cell += ch;
+      } else if (ch === '"') quoted = true;
+      else if (ch === ",") cells.push(cell), (cell = "");
+      else cell += ch;
+    }
+    cells.push(cell);
+    return cells.map((c) => c.trim());
+  };
+
+  /**
+   * Parse a list file into entries ("Name" or "Name | note").
+   * - Text: one entry per line; blank lines and lines starting with # skipped.
+   * - CSV with a header row containing "name": that column, plus a
+   *   "note"/"notes"/"description"/"role" column if present.
+   * - Other CSV: every cell is a name.
+   */
+  const parseListText = (text, { csv = false } = {}) => {
+    const lines = String(text)
+      .replace(/^﻿/, "")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"));
+
+    if (!csv) return lines.map(splitEntry).filter((e) => e.name).map(joinEntry);
+
+    const rows = lines.map(csvCells);
+    const header = (rows[0] ?? []).map((h) => h.toLowerCase());
+    const nameCol = header.indexOf("name");
+    if (nameCol !== -1) {
+      const noteCol = header.findIndex((h) =>
+        ["note", "notes", "description", "role"].includes(h),
+      );
+      return rows
+        .slice(1)
+        .map((r) => ({ name: r[nameCol] ?? "", note: noteCol === -1 ? "" : r[noteCol] ?? "" }))
+        .filter((e) => e.name)
+        .map(joinEntry);
+    }
+    return rows.flat().filter(Boolean);
+  };
+
+  const joinEntry = ({ name, note }) => (note ? `${name} | ${note}` : name);
+
+  /** Fetch and parse a list from a URL (CSV if the path ends in .csv). */
+  const fetchList = async (url) => {
+    const res = await fetch(url, { cache: "no-cache", credentials: "omit" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const csv = /\.csv$/i.test(new URL(url).pathname) || /csv/i.test(res.headers.get("content-type") ?? "");
+    return parseListText(await res.text(), { csv });
+  };
+
+  // Lists anyone can opt into. Each is bundled (so it works offline and on
+  // first add) and synced from the repo, so fixes reach users between releases.
+  const LISTS_BASE = "https://raw.githubusercontent.com/jstock29/take-radar/main/lists/";
+  const STARTERS = [
+    {
+      id: "republican-operatives",
+      name: "Republican operatives",
+      description: "Strategists, pollsters, campaign and party staff, including ones now working in media.",
+      file: "lists/republican-operatives.txt",
+      style: { fill: "#ff3b3026", border: "#ff3b30ff", borderWidth: 1 },
+    },
+    {
+      id: "democratic-operatives",
+      name: "Democratic operatives",
+      description: "Strategists, pollsters, campaign and party staff, including ones now working in media.",
+      file: "lists/democratic-operatives.txt",
+      style: { fill: "#0a84ff26", border: "#0a84ffff", borderWidth: 1 },
+    },
+    {
+      id: "harpers",
+      name: "Harper's Letter signatories",
+      description: "Signers of the 2020 open letter on justice and open debate.",
+      file: "lists/harpers-letter.txt",
+      style: { fill: "#ff8c00ff", border: "#ff8c00ff", borderWidth: 0 },
+    },
+  ].map((s) => ({ ...s, url: LISTS_BASE + s.file.split("/").pop() }));
+
+  // --- Lists ------------------------------------------------------------------
+
   /**
    * Bring a stored list up to the current shape. Versions before 0.4 stored
-   * a single opaque `color`; that becomes the fill.
+   * a single opaque `color`; that becomes the fill. A list synced from a URL
+   * carries `source: { url, updatedAt, error }`.
    */
   const normalizeList = (list = {}) => {
     const fill = parseColor(list.fill) ?? parseColor(list.color);
     const border = parseColor(list.border);
-    return {
+    const out = {
       id: list.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: typeof list.name === "string" ? list.name : "Untitled",
       fill: fill ? toHex8(fill) : DEFAULT_FILL,
@@ -80,23 +180,57 @@
       borderWidth: clamp(Math.round(Number(list.borderWidth) || 0), 0, MAX_BORDER_WIDTH),
       names: Array.isArray(list.names) ? list.names.filter((n) => typeof n === "string") : [],
     };
+    if (typeof list.starterId === "string") out.starterId = list.starterId;
+    if (list.source && typeof list.source.url === "string") {
+      out.source = {
+        url: list.source.url,
+        updatedAt: Number(list.source.updatedAt) || 0,
+        error: typeof list.source.error === "string" ? list.source.error : "",
+      };
+    }
+    return out;
   };
+
+  // --- Settings ---------------------------------------------------------------
+
+  const DEFAULT_SETTINGS = { paused: false, disabledHosts: [] };
+
+  const normalizeSettings = (s = {}) => ({
+    paused: Boolean(s?.paused),
+    disabledHosts: Array.isArray(s?.disabledHosts)
+      ? s.disabledHosts.filter((h) => typeof h === "string")
+      : [],
+  });
+
+  // --- Highlight style --------------------------------------------------------
 
   // Black or white, whichever reads better on the given color.
   const contrastText = ({ r, g, b }) =>
     0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#000" : "#fff";
 
+  // Everything is set inline (no stylesheet) so highlights inside shadow
+  // roots, which page-level CSS can't reach, look the same as the rest.
+  const BASE_STYLE = [
+    ["padding", "0 2px"],
+    ["border-radius", "3px"],
+    ["-webkit-box-decoration-break", "clone"],
+    ["box-decoration-break", "clone"],
+    ["cursor", "help"],
+  ];
+
   /**
    * The inline CSS for a list's highlight, as [property, value] pairs. The
    * border is drawn with box-shadow so it never shifts the page's layout
    * vertically, and it survives line wraps thanks to box-decoration-break.
+   * Pass { base: true } to include padding, radius and cursor.
    */
-  const highlightStyle = (list) => {
+  const highlightStyle = (list, { base = false } = {}) => {
     const fill = parseColor(list.fill) ?? parseColor(DEFAULT_FILL);
     const border = parseColor(list.border) ?? parseColor(DEFAULT_BORDER);
     const width = list.borderWidth || 0;
     const hasBorder = width > 0 && border.a > 0;
     const style = [
+      ...(base ? BASE_STYLE : []),
       ["background-color", toCss(list.fill)],
       ["box-shadow", hasBorder ? `0 0 0 ${width}px ${toCss(list.border)}` : "none"],
       ["margin", hasBorder ? `0 ${width}px` : "0"],
@@ -107,18 +241,24 @@
     return style;
   };
 
-  globalThis.TakeRadar = {
+  Object.assign((globalThis.TakeRadar ??= {}), {
     ext,
     DEFAULT_FILL,
     DEFAULT_BORDER,
     MAX_BORDER_WIDTH,
+    DEFAULT_SETTINGS,
+    STARTERS,
     clamp,
     parseColor,
     toHex8,
     toCss,
     rgbToHsv,
     hsvToRgb,
+    splitEntry,
+    parseListText,
+    fetchList,
     normalizeList,
+    normalizeSettings,
     highlightStyle,
-  };
+  });
 })();

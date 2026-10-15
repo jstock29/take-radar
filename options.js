@@ -1,13 +1,27 @@
 import { createColorPicker } from "./color-picker.js";
 
-const { ext, normalizeList, parseColor, toHex8, toCss, highlightStyle, MAX_BORDER_WIDTH } =
-  globalThis.TakeRadar;
+const {
+  ext,
+  normalizeList,
+  normalizeSettings,
+  parseColor,
+  parseListText,
+  fetchList,
+  toHex8,
+  toCss,
+  highlightStyle,
+  MAX_BORDER_WIDTH,
+  STARTERS,
+} = globalThis.TakeRadar;
 
 const listsEl = document.getElementById("lists");
 const statusEl = document.getElementById("status");
 const importFile = document.getElementById("importFile");
 
 let lists = [];
+let settings = normalizeSettings();
+// list id -> function that re-renders a card's synced names and status
+const cardUpdaters = new Map();
 
 // --- Saving ----------------------------------------------------------------
 
@@ -58,12 +72,6 @@ const icon = (path, size = 12) => {
 };
 const CHEVRON = "M4.5 2.5 8 6l-3.5 3.5";
 const CROSS = "M3 3l6 6M9 3l-6 6";
-
-const parseNames = (text) =>
-  text
-    .split(/[\n,]/)
-    .map((n) => n.trim().replace(/^"(.*)"$/, "$1").trim())
-    .filter(Boolean);
 
 const applyHighlight = (node, list) => {
   node.style.cssText = "";
@@ -156,8 +164,10 @@ function renderList(list, { open = false } = {}) {
     clearTimeout(armTimer);
     if (closeOpenPicker?.card === card) closeOpenPicker();
     lists = lists.filter((l) => l !== list);
+    cardUpdaters.delete(list.id);
     card.remove();
     renderEmptyState();
+    renderStarters();
     scheduleSave();
   });
   del.addEventListener("blur", disarm);
@@ -284,7 +294,7 @@ function renderList(list, { open = false } = {}) {
   // Names -----------------------------------------------------------------------
 
   const textarea = el("textarea", {
-    placeholder: "One name or phrase per line",
+    placeholder: "One name per line. Add a note after a |, e.g.\nJane Doe | former campaign spokeswoman",
     value: list.names.join("\n"),
     spellcheck: false,
     ariaLabel: "Names",
@@ -298,6 +308,48 @@ function renderList(list, { open = false } = {}) {
     scheduleSave();
   });
 
+  // Lists synced from a URL are read-only here; the source is the truth.
+  const syncInfo = el("div", { className: "sync-info" });
+  const renderSync = () => {
+    textarea.readOnly = Boolean(list.source);
+    textarea.classList.toggle("readonly", Boolean(list.source));
+    if (!list.source) {
+      syncInfo.replaceChildren();
+      syncInfo.hidden = true;
+      return;
+    }
+    const { url, updatedAt, error } = list.source;
+    const where = el("a", { href: url, target: "_blank", rel: "noreferrer", textContent: shortUrl(url) });
+    const when = updatedAt ? `updated ${timeAgo(updatedAt)}` : "not refreshed yet";
+    const refresh = el("button", { type: "button", className: "link-btn", textContent: "Refresh" });
+    refresh.addEventListener("click", async () => {
+      refresh.disabled = true;
+      refresh.textContent = "Refreshing…";
+      await save();
+      await ext.runtime.sendMessage({ type: "refresh-lists", ids: [list.id] }).catch(() => {});
+    });
+    const unlink = el("button", { type: "button", className: "link-btn", textContent: "Stop syncing" });
+    unlink.title = "Keep these names and edit them here instead";
+    unlink.addEventListener("click", () => {
+      delete list.source;
+      renderSync();
+      scheduleSave();
+    });
+    syncInfo.hidden = false;
+    syncInfo.replaceChildren(
+      el("div", {}, "Synced from ", where, ` · ${when}`),
+      ...(error ? [el("div", { className: "sync-error", textContent: `Last refresh failed: ${error}` })] : []),
+      el("div", { className: "sync-actions" }, refresh, unlink),
+    );
+  };
+
+  // Called when the background script refreshes this list's names.
+  cardUpdaters.set(list.id, () => {
+    if (document.activeElement !== textarea) textarea.value = list.names.join("\n");
+    updateCount();
+    renderSync();
+  });
+
   const body = el(
     "div",
     { className: "list-body" },
@@ -309,57 +361,129 @@ function renderList(list, { open = false } = {}) {
     borderRow.row,
     borderRow.slot,
     el("div", { className: "section-label", textContent: "Names" }),
+    syncInfo,
     textarea,
   );
 
   card.append(header, body);
   updateCount();
   refreshStyle();
+  renderSync();
   return card;
 }
 
 // --- Page ---------------------------------------------------------------------
 
+const shortUrl = (url) => {
+  try {
+    const u = new URL(url);
+    const file = u.pathname.split("/").filter(Boolean).pop();
+    return file ? `${u.hostname}/…/${file}` : u.hostname;
+  } catch {
+    return url;
+  }
+};
+
+const timeAgo = (ms) => {
+  const mins = Math.round((Date.now() - ms) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+};
+
 function renderEmptyState() {
   if (lists.length) {
     listsEl.querySelector(".empty")?.remove();
   } else if (!listsEl.querySelector(".empty")) {
-    listsEl.append(el("div", { className: "empty", textContent: "No lists yet." }));
+    listsEl.append(
+      el("div", {
+        className: "empty",
+        textContent: "No lists yet. Add a starter list below, or make your own.",
+      }),
+    );
   }
 }
 
-function addList(partial) {
+function addList(partial, { open = true } = {}) {
   const list = normalizeList(partial);
   lists.push(list);
-  const card = renderList(list, { open: true });
+  const card = renderList(list, { open });
   listsEl.append(card);
   renderEmptyState();
+  renderStarters();
   card.scrollIntoView({ block: "nearest" });
   scheduleSave();
   return card;
 }
 
+// --- Starter lists ---------------------------------------------------------------
+
+const startersEl = document.getElementById("starters");
+
+const hasStarter = (starter) =>
+  lists.some((l) => l.starterId === starter.id || (starter.id === "harpers" && l.id === "default"));
+
+function renderStarters() {
+  const available = STARTERS.filter((s) => !hasStarter(s));
+  startersEl.hidden = !available.length;
+  startersEl.replaceChildren(
+    el("div", { className: "section-label", textContent: "Starter lists" }),
+    ...available.map((starter) => {
+      const add = el("button", { type: "button", className: "starter-add", textContent: "Add" });
+      add.addEventListener("click", async () => {
+        add.disabled = true;
+        // Start from the bundled copy, then sync from the repo for updates.
+        const res = await fetch(ext.runtime.getURL(starter.file));
+        addList(
+          {
+            name: starter.name,
+            starterId: starter.id,
+            ...starter.style,
+            names: parseListText(await res.text()),
+            source: { url: starter.url, updatedAt: Date.now() },
+          },
+          { open: false },
+        );
+        await save();
+        ext.runtime.sendMessage({ type: "refresh-lists", ids: [lists.at(-1).id] }).catch(() => {});
+      });
+      return el(
+        "div",
+        { className: "starter" },
+        el(
+          "div",
+          { className: "starter-text" },
+          el("div", { className: "starter-name", textContent: starter.name }),
+          el("div", { className: "starter-desc", textContent: starter.description }),
+        ),
+        add,
+      );
+    }),
+  );
+}
+
+// --- Adding lists ---------------------------------------------------------------
+
 const isPopup = () => window.innerWidth < 500;
+
+const openInTab = async () => {
+  await save();
+  await ext.runtime.openOptionsPage();
+  window.close();
+};
 
 document.getElementById("addListBtn").addEventListener("click", () => {
   addList({ name: "New list" }).querySelector(".list-name").select();
 });
 
-document.getElementById("openTabBtn").addEventListener("click", async () => {
-  await save();
-  await ext.runtime.openOptionsPage();
-  window.close();
-});
+document.getElementById("openTabBtn").addEventListener("click", openInTab);
 
 // A file dialog steals focus from the popup. Chrome keeps the popup open for
 // it, but Safari and Firefox close it, so on those we import from a tab.
-document.getElementById("importBtn").addEventListener("click", async () => {
-  if (isPopup() && location.protocol !== "chrome-extension:") {
-    await save();
-    await ext.runtime.openOptionsPage();
-    window.close();
-    return;
-  }
+document.getElementById("importBtn").addEventListener("click", () => {
+  if (isPopup() && location.protocol !== "chrome-extension:") return openInTab();
   importFile.click();
 });
 
@@ -368,10 +492,145 @@ importFile.addEventListener("change", async () => {
   if (!file) return;
   addList({
     name: file.name.replace(/\.[^.]+$/, ""),
-    names: parseNames(await file.text()),
+    names: parseListText(await file.text(), { csv: /\.csv$/i.test(file.name) }),
   });
   importFile.value = "";
 });
+
+// Subscribing to a URL --------------------------------------------------------------
+
+const urlForm = document.getElementById("urlForm");
+const urlInput = document.getElementById("urlInput");
+const urlError = document.getElementById("urlError");
+const urlSubmit = urlForm.querySelector("button[type=submit]");
+
+document.getElementById("urlBtn").addEventListener("click", () => {
+  urlForm.hidden = !urlForm.hidden;
+  if (!urlForm.hidden) urlInput.focus();
+});
+document.getElementById("urlCancel").addEventListener("click", () => {
+  urlForm.hidden = true;
+  urlError.textContent = "";
+});
+
+// "republican-operatives.txt" -> "Republican operatives"
+const nameFromUrl = (url) => {
+  const file = new URL(url).pathname.split("/").filter(Boolean).pop() ?? "";
+  const base = decodeURIComponent(file).replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+  return base ? base[0].toUpperCase() + base.slice(1) : new URL(url).hostname;
+};
+
+urlForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  urlError.textContent = "";
+  let url;
+  try {
+    url = new URL(urlInput.value.trim());
+    if (!/^https?:$/.test(url.protocol)) throw new Error();
+  } catch {
+    urlError.textContent = "Enter a full http:// or https:// address.";
+    return;
+  }
+
+  urlSubmit.disabled = true;
+  urlSubmit.textContent = "Loading…";
+  const done = () => {
+    urlSubmit.disabled = false;
+    urlSubmit.textContent = "Add";
+  };
+
+  let names;
+  try {
+    names = await fetchList(url.href);
+  } catch (err) {
+    if (!(err instanceof TypeError)) {
+      urlError.textContent = `Couldn't load that list (${err.message}).`;
+      return done();
+    }
+    // A network-level failure is usually the site not allowing cross-origin
+    // reads; with permission for that site the extension can read it anyway.
+    // Save the list first: on some browsers the permission prompt closes
+    // this popup, and the background script finishes the job once granted.
+    addList({ name: nameFromUrl(url.href), names: [], source: { url: url.href } }, { open: false });
+    await save();
+    const granted = await ext.permissions
+      .request({ origins: [`${url.origin}/*`] })
+      .catch(() => false);
+    if (!granted) {
+      urlError.textContent = `Couldn't read ${url.hostname} without permission. The list was added but is empty; allow access and press Refresh on it.`;
+      return done();
+    }
+    await ext.runtime.sendMessage({ type: "refresh-lists", ids: [lists.at(-1).id] }).catch(() => {});
+    urlForm.hidden = true;
+    urlInput.value = "";
+    return done();
+  }
+
+  if (!names.length) {
+    urlError.textContent = "That address loaded, but no names were found in it.";
+    return done();
+  }
+  addList({
+    name: nameFromUrl(url.href),
+    names,
+    source: { url: url.href, updatedAt: Date.now() },
+  });
+  urlForm.hidden = true;
+  urlInput.value = "";
+  done();
+});
+
+// --- On/off -------------------------------------------------------------------------
+
+const powerBtn = document.getElementById("powerBtn");
+const siteRow = document.getElementById("siteRow");
+let currentHost = null;
+let shortcut = "";
+
+const saveSettings = () => ext.storage.local.set({ settings }).catch(() => {});
+
+function renderPower() {
+  powerBtn.ariaChecked = String(!settings.paused);
+  powerBtn.title = settings.paused ? "Resume highlighting" : "Pause highlighting everywhere";
+  powerBtn.querySelector(".switch-label").textContent = settings.paused ? "Paused" : "On";
+  document.body.classList.toggle("paused", settings.paused);
+
+  if (settings.paused) {
+    siteRow.hidden = false;
+    siteRow.replaceChildren(
+      el("span", { textContent: `Paused everywhere${shortcut ? ` · ${shortcut} to resume` : ""}` }),
+    );
+    return;
+  }
+  siteRow.hidden = !currentHost;
+  if (!currentHost) return;
+
+  const off = settings.disabledHosts.includes(currentHost);
+  const button = el("button", {
+    type: "button",
+    className: "link-btn",
+    textContent: off ? "Turn back on" : "Turn off for this site",
+  });
+  button.addEventListener("click", () => {
+    settings.disabledHosts = off
+      ? settings.disabledHosts.filter((h) => h !== currentHost)
+      : [...settings.disabledHosts, currentHost];
+    saveSettings();
+    renderPower();
+  });
+  siteRow.replaceChildren(
+    el("span", {}, off ? "Off on " : "On for ", el("b", { textContent: currentHost })),
+    button,
+  );
+}
+
+powerBtn.addEventListener("click", () => {
+  settings.paused = !settings.paused;
+  saveSettings();
+  renderPower();
+});
+
+// --- Pickers, keys and loading --------------------------------------------------------
 
 // Clicking outside a color picker closes it.
 document.addEventListener("pointerdown", (e) => {
@@ -388,8 +647,44 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-ext.storage.local.get("lists").then((data) => {
+// Pick up changes made elsewhere: names refreshed by the background script,
+// or the pause shortcut pressed while this page is open.
+ext.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.settings) {
+    settings = normalizeSettings(changes.settings.newValue);
+    renderPower();
+  }
+  if (changes.lists) {
+    for (const stored of (changes.lists.newValue ?? []).map(normalizeList)) {
+      const mine = lists.find((l) => l.id === stored.id);
+      if (!mine?.source || !stored.source) continue;
+      if (JSON.stringify([mine.names, mine.source]) === JSON.stringify([stored.names, stored.source])) {
+        continue;
+      }
+      mine.names = stored.names;
+      mine.source = stored.source;
+      cardUpdaters.get(mine.id)?.();
+    }
+  }
+});
+
+(async () => {
+  const [data, tabs, commands] = await Promise.all([
+    ext.storage.local.get(["lists", "settings"]),
+    ext.tabs?.query({ active: true, currentWindow: true }).catch(() => []) ?? [],
+    ext.commands?.getAll?.().catch(() => []) ?? [],
+  ]);
   lists = (Array.isArray(data?.lists) ? data.lists : []).map(normalizeList);
+  settings = normalizeSettings(data?.settings);
+
+  // The page the popup was opened over (unknown when opened as a tab).
+  const url = tabs?.[0]?.url;
+  if (url && /^https?:/.test(url)) currentHost = new URL(url).hostname;
+  shortcut = commands?.find((c) => c.name === "toggle-pause")?.shortcut ?? "";
+
   lists.forEach((list) => listsEl.append(renderList(list)));
   renderEmptyState();
-});
+  renderStarters();
+  renderPower();
+})();

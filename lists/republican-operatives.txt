@@ -1,0 +1,106 @@
+# Take Radar list: Republican operatives
+#
+# People whose careers are in Republican politics: strategists, consultants,
+# pollsters, campaign, party and super PAC staff, and former White House or
+# leadership aides. Many now appear in news stories and on air as analysts,
+# pollsters, hosts or "strategists" without that background being obvious.
+# Inclusion reflects professional background, not current views: several
+# people here have since broken with the party or with Trump, and the note
+# says so where that's the case.
+#
+# Elected officials and household names are mostly left out; the point is
+# the people you might not recognize in an article. Names shared with other
+# well-known people (e.g. a film director) are left out to avoid false
+# matches; the note on each highlight says who is meant.
+#
+# Corrections and additions: https://github.com/jstock29/take-radar/issues
+# Last reviewed: 2026-10
+#
+# Format: Name | note
+
+# Strategists and consultants
+Alex Conant | Republican strategist (Firehouse Strategies); Marco Rubio's 2016 campaign communications director
+Barry Bennett | Republican strategist; Ben Carson's 2016 campaign manager and Trump 2016 adviser
+Brad Todd | Republican ad maker; co-founder of OnMessage Inc.
+Brian Walsh | Republican strategist; former NRSC communications director and former president of pro-Trump super PAC America First Action
+Colin Reed | Republican strategist; Scott Brown's 2014 Senate campaign manager and former Chris Christie aide
+Corry Bliss | Republican strategist; former executive director of the House GOP super PAC Congressional Leadership Fund
+Dan Conston | President of Congressional Leadership Fund, the House GOP super PAC
+Dave Carney | Republican strategist; longtime adviser to Rick Perry and Greg Abbott
+David Kochel | Republican strategist from Iowa; adviser to Mitt Romney (2012) and Jeb Bush (2016)
+David Urban | Republican strategist; ran Trump's 2016 Pennsylvania campaign
+Doug Heye | Republican strategist; former RNC communications director and deputy chief of staff to Eric Cantor
+Ed Rollins | Republican strategist; ran Ronald Reagan's 1984 re-election campaign
+Jeff Roe | Republican strategist (Axiom Strategies); Ted Cruz's 2016 campaign manager and chief strategist of DeSantis super PAC Never Back Down
+Josh Holmes | Republican strategist (Cavalry LLC); former chief of staff to Mitch McConnell
+Karl Rove | Republican strategist; George W. Bush's chief political adviser
+Kevin Madden | Republican strategist; senior adviser to Mitt Romney's 2012 campaign
+Liam Donovan | Republican strategist and lobbyist; former NRSC aide
+Mark McKinnon | Republican media strategist for George W. Bush; co-creator of Showtime's "The Circus"
+Mary Matalin | Republican strategist; adviser to George H.W. Bush and Dick Cheney
+Matt Gorman | Republican strategist; former NRCC communications director and adviser to Tim Scott's 2024 campaign
+Matthew Dowd | George W. Bush's 2004 chief strategist; later left the Republican Party
+Mike DuHaime | Republican strategist; Chris Christie's longtime chief strategist
+Mike Shields | Republican strategist; former RNC chief of staff
+Rob Stutzman | Republican strategist from California; former adviser to Arnold Schwarzenegger
+Steven Law | Longtime president of Senate Leadership Fund, the Senate GOP super PAC; former McConnell chief of staff
+Terry Sullivan | Republican strategist; Marco Rubio's 2016 campaign manager
+Ralph Reed | Founder of the Faith & Freedom Coalition; former executive director of the Christian Coalition
+
+# Trump campaign and White House
+Brad Parscale | Trump's 2020 campaign manager (until mid-2020); 2016 digital director
+Chris LaCivita | Co-manager of Trump's 2024 campaign
+Corey Lewandowski | Trump's 2016 campaign manager
+Hogan Gidley | Former Trump White House deputy press secretary; America First Policy Institute
+Jason Miller | Senior adviser to Trump's 2016, 2020 and 2024 campaigns
+Kayleigh McEnany | Former Trump White House press secretary and RNC spokesperson; now a Fox News host
+Marc Short | Former chief of staff to Vice President Mike Pence and Trump White House legislative affairs director
+Mercedes Schlapp | Former Trump White House director of strategic communications
+Sean Spicer | Former Trump White House press secretary and RNC communications director
+Steve Cortes | Former Trump campaign adviser; commentator
+Alyssa Farah Griffin | Former Trump White House communications director; now co-host of ABC's "The View"
+
+# Bush-era and congressional aides now in media or consulting
+Ari Fleischer | George W. Bush's White House press secretary; now a commentator
+Brendan Buck | Former counselor to House Speaker Paul Ryan
+Dana Perino | George W. Bush's White House press secretary; now a Fox News host
+John Feehery | Republican strategist; former spokesman for House Speaker Dennis Hastert
+Ken Spain | Republican strategist; former NRCC communications director
+Lanhee Chen | Mitt Romney's 2012 policy director; Hoover Institution fellow
+Matt Schlapp | Chairman of CPAC; former George W. Bush White House political director
+Michael Steel | Former spokesman for House Speaker John Boehner
+Nicolle Wallace | George W. Bush's White House communications director and 2008 McCain-Palin adviser; now an MSNBC host
+Ron Bonjean | Republican strategist; former Senate and House GOP leadership spokesman
+Rory Cooper | Republican strategist; former communications director for Eric Cantor
+Sara Fagen | Former George W. Bush White House political director
+Sarah Isgur | Former Trump Justice Department spokeswoman and Carly Fiorina 2016 deputy campaign manager; now a legal commentator
+Scott Jennings | Republican strategist; former George W. Bush White House aide and longtime McConnell adviser; CNN commentator
+Brad Blakeman | Republican strategist; former George W. Bush White House aide
+
+# Pollsters and data
+Bill McInturff | Republican pollster; co-founder of Public Opinion Strategies, which co-runs the NBC News poll
+Frank Luntz | Republican pollster and messaging consultant; helped write the 1994 "Contract with America"
+Glen Bolger | Republican pollster; co-founder of Public Opinion Strategies
+John McLaughlin | Republican pollster (McLaughlin & Associates); Trump campaign pollster
+Jon McHenry | Republican pollster (North Star Opinion Research)
+Kristen Soltis Anderson | Republican pollster; co-founder of Echelon Insights
+Micah Roberts | Republican pollster; partner at Public Opinion Strategies
+Neil Newhouse | Republican pollster; co-founder of Public Opinion Strategies and Mitt Romney's 2012 pollster
+Patrick Ruffini | Republican pollster and data strategist; co-founder of Echelon Insights
+Tony Fabrizio | Republican pollster; Trump campaign pollster in 2016, 2020 and 2024
+Whit Ayres | Republican pollster (North Star Opinion Research); Marco Rubio's 2016 pollster
+
+# Republican strategists turned anti-Trump
+Mike Madrid | Republican strategist; co-founder of the anti-Trump Lincoln Project
+Reed Galen | Republican strategist; co-founder of the anti-Trump Lincoln Project
+Rick Wilson | Republican strategist; co-founder of the anti-Trump Lincoln Project
+Sarah Longwell | Republican strategist; founder of the Republican Accountability Project and publisher of The Bulwark
+Steve Schmidt | Senior strategist for John McCain's 2008 campaign; Lincoln Project co-founder; has since left the party
+Stuart Stevens | Mitt Romney's 2012 chief strategist; Lincoln Project adviser
+Tara Setmayer | Former House Republican communications director; Lincoln Project senior adviser
+Tim Miller | Jeb Bush's 2016 communications director and former RNC spokesman; now writes for The Bulwark
+
+# Commentators with Republican campaign backgrounds
+Ana Navarro | Republican strategist (John McCain, Jon Huntsman campaigns); co-host of ABC's "The View"
+Leslie Sanchez | Republican strategist and commentator; former George W. Bush administration official
+Shermichael Singleton | Republican strategist; former aide to Ben Carson at HUD; CNN commentator

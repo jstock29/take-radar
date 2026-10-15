@@ -1,0 +1,111 @@
+# Take Radar list: Democratic operatives
+#
+# People whose careers are in Democratic politics: strategists, consultants,
+# pollsters, campaign, party and super PAC staff, and former White House or
+# leadership aides. Many now appear in news stories and on air as analysts,
+# pollsters, hosts or "strategists" without that background being obvious.
+# Inclusion reflects professional background, not current views; the note
+# says so where someone has since broken with the party.
+#
+# Elected officials and household names are mostly left out; the point is
+# the people you might not recognize in an article. Names shared with other
+# well-known people (e.g. a film director) are left out to avoid false
+# matches; the note on each highlight says who is meant.
+#
+# Corrections and additions: https://github.com/jstock29/take-radar/issues
+# Last reviewed: 2026-10
+#
+# Format: Name | note
+
+# Strategists and consultants
+Adam Jentleson | Democratic strategist; former deputy chief of staff to Harry Reid and chief of staff to John Fetterman
+Adrienne Elrod | Democratic strategist; Hillary Clinton 2016 and Kamala Harris 2024 senior adviser
+Anita Dunn | Democratic strategist (SKDK); senior adviser to President Biden
+Antjuan Seawright | Democratic strategist from South Carolina
+Basil Smikle | Democratic strategist; former executive director of the New York State Democratic Party
+Brad Woodhouse | Democratic strategist; former DNC communications director
+Bradley Tusk | Political consultant and investor; Michael Bloomberg's 2009 campaign manager and Uber's early political strategist
+Chris Kofinis | Democratic strategist; former chief of staff to Sen. Joe Manchin
+Chris Lehane | Former Clinton White House aide and Al Gore 2000 press secretary; now heads global affairs at OpenAI
+David Axelrod | Barack Obama's chief strategist
+David Plouffe | Barack Obama's 2008 campaign manager; senior adviser to Kamala Harris's 2024 campaign
+Doug Sosnik | Democratic strategist; Bill Clinton's White House political director
+Doug Thornell | Democratic strategist; CEO of SKDK
+Hilary Rosen | Democratic strategist (SKDK); CNN commentator
+Howard Wolfson | Hillary Clinton's 2008 communications director; longtime Michael Bloomberg adviser
+James Carville | Democratic strategist; Bill Clinton's 1992 campaign strategist
+Jesse Ferguson | Democratic strategist; former DCCC deputy executive director and Clinton 2016 spokesman
+Jim Messina | Barack Obama's 2012 campaign manager
+Joe Trippi | Democratic strategist; Howard Dean's 2004 campaign manager
+Jonathan Kott | Democratic strategist and lobbyist; former senior adviser to Sens. Joe Manchin and Chris Coons
+Lis Smith | Democratic strategist; senior adviser to Pete Buttigieg's 2020 campaign
+Max Burns | Democratic strategist (Third Degree Strategies)
+Michael Starr Hopkins | Democratic strategist (Northern Starr Strategies); commentator
+Mike Lux | Progressive strategist; former Clinton White House aide
+Paul Begala | Democratic strategist; Bill Clinton adviser; CNN commentator
+Philippe Reines | Longtime adviser to Hillary Clinton
+Rebecca Katz | Progressive strategist; senior adviser to John Fetterman's 2022 campaign
+Robby Mook | Hillary Clinton's 2016 campaign manager
+Sean Clegg | Democratic strategist (Bearstar Strategies); adviser to Kamala Harris and Gavin Newsom
+Steve Schale | Democratic strategist from Florida; ran pro-Biden super PAC Unite the Country
+Zac Petkanas | Democratic strategist; Clinton 2016 rapid response director
+
+# Campaign, party and super PAC leadership
+Faiz Shakir | Bernie Sanders's 2020 campaign manager; founder of the media outlet More Perfect Union
+Guy Cecil | Former chairman of Priorities USA, the main Democratic super PAC
+Jen O'Malley Dillon | Chair of the 2024 Biden and Harris campaigns; former Biden White House deputy chief of staff
+Michael Tyler | Communications director for the 2024 Biden and Harris campaigns
+Mo Elleithee | Former DNC communications director; executive director of Georgetown's Institute of Politics and Public Service
+Patti Solis Doyle | Hillary Clinton's 2008 campaign manager
+Quentin Fulks | Principal deputy campaign manager for the 2024 Biden and Harris campaigns
+Rodell Mollineau | Democratic strategist; former Harry Reid aide and founding president of American Bridge
+Stephanie Cutter | Obama 2012 deputy campaign manager; co-founder of Precision Strategies
+Waleed Shahid | Progressive strategist; former Justice Democrats spokesman
+Amanda Litman | Co-founder of Run for Something; Clinton 2016 campaign staffer
+Bill Burton | Former Obama White House deputy press secretary; co-founder of super PAC Priorities USA
+
+# White House and campaign aides now in media
+Ashley Allison | Democratic strategist; Biden 2020 national coalitions director; CNN commentator
+Ben LaBolt | Obama 2012 campaign press secretary and Biden White House communications director
+Brian Fallon | Hillary Clinton's 2016 press secretary; founder of Demand Justice; Harris 2024 senior communications director
+Dan Pfeiffer | Obama White House communications director; co-host of "Pod Save America"
+Dee Dee Myers | Bill Clinton's White House press secretary
+Donna Brazile | Former interim DNC chair and Al Gore's 2000 campaign manager; commentator
+Jamal Simmons | Democratic strategist; former communications director for Vice President Kamala Harris
+Jen Psaki | Biden White House press secretary; now an MSNBC host
+Jennifer Palmieri | Obama White House communications director and Clinton 2016 communications director
+Joe Lockhart | Bill Clinton's White House press secretary
+Jon Lovett | Former Obama speechwriter; co-host of "Pod Save America"
+Karen Finney | Democratic strategist; Clinton 2016 senior spokeswoman; former DNC communications director
+Karine Jean-Pierre | Biden White House press secretary; has since said she left the Democratic Party
+Kurt Bardella | Democratic strategist and DCCC adviser; former spokesman for Republican Rep. Darrell Issa
+Maria Cardona | Democratic strategist and DNC member; CNN commentator
+Neera Tanden | President of the Center for American Progress; former Biden White House domestic policy adviser and Clinton aide
+Symone Sanders-Townsend | Former chief spokesperson for Vice President Kamala Harris; now an MSNBC host
+Tommy Vietor | Former Obama National Security Council spokesman; co-host of "Pod Save America"
+Bakari Sellers | Former South Carolina state representative; Democratic commentator and Harris 2020 surrogate
+Jessica Tarlov | Democratic strategist; co-host of Fox News's "The Five"
+Julie Roginsky | Democratic strategist; former Fox News contributor
+
+# Pollsters and data
+Anna Greenberg | Democratic pollster (GQR)
+Brian Stryker | Democratic pollster; partner at Impact Research
+Celinda Lake | Democratic pollster (Lake Research Partners); Joe Biden's 2020 pollster
+David Binder | Democratic pollster and focus-group researcher; worked for Barack Obama's campaigns
+Geoff Garin | Democratic pollster; president of Hart Research
+Jeff Horwitt | Democratic pollster at Hart Research, which co-runs the NBC News poll
+Jefrey Pollock | Democratic pollster; co-founder of Global Strategy Group
+Joel Benenson | Democratic pollster; Barack Obama's pollster and Hillary Clinton's 2016 chief strategist
+John Anzalone | Democratic pollster (Impact Research); Joe Biden's 2020 pollster
+Margie Omero | Democratic pollster (GBAO)
+Mark Mellman | Democratic pollster (The Mellman Group); founder of Democratic Majority for Israel
+Molly Murphy | Democratic pollster; president of Impact Research and Joe Biden's 2024 pollster
+Peter Hart | Democratic pollster; founder of Hart Research
+Sean McElwee | Progressive pollster; founder of Data for Progress
+Stan Greenberg | Democratic pollster (GQR); Bill Clinton's 1992 pollster
+Tom Bonier | Democratic data strategist at TargetSmart, a Democratic data firm
+
+# Think tanks and groups with party roots
+Jim Kessler | Co-founder of Third Way, a centrist Democratic think tank; former aide to Chuck Schumer
+Matt Bennett | Co-founder of Third Way, a centrist Democratic think tank; former Clinton White House aide
+Simon Rosenberg | Democratic strategist; founder of NDN; former Clinton 1992 campaign aide
