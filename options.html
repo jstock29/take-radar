@@ -10,16 +10,35 @@
     <header>
       <h1>Take Radar</h1>
       <span id="status" role="status"></span>
+      <button id="powerBtn" class="switch" type="button" role="switch" aria-checked="true">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+        <span class="switch-label">On</span>
+      </button>
       <button id="openTabBtn" class="icon-btn" type="button" title="Open in a tab">
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
           <path d="M7 2h3v3M10 2 5.5 6.5M8.5 7v2.5h-6.5v-6.5H5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </button>
     </header>
-    <main id="lists"></main>
+    <div id="siteRow" class="site-row" hidden></div>
+    <main>
+      <div id="lists"></div>
+      <section id="starters" class="starters" hidden></section>
+    </main>
+    <form id="urlForm" class="url-form" hidden>
+      <label for="urlInput">Add a list from a web address</label>
+      <div class="url-row">
+        <input id="urlInput" type="url" placeholder="https://example.com/names.txt" autocomplete="off" spellcheck="false" />
+        <button type="submit">Add</button>
+        <button id="urlCancel" type="button" class="link-btn">Cancel</button>
+      </div>
+      <p class="hint">A .txt file with one name per line, or a .csv with a "name" column. Checked for updates twice a day.</p>
+      <p id="urlError" class="url-error" role="alert"></p>
+    </form>
     <footer>
       <button id="addListBtn" type="button">+ New list</button>
-      <button id="importBtn" type="button">Import .txt / .csv</button>
+      <button id="importBtn" type="button">Import file</button>
+      <button id="urlBtn" type="button">From URL</button>
       <input type="file" id="importFile" accept=".csv,.txt,text/plain,text/csv" hidden />
     </footer>
     <script src="shared.js"></script>

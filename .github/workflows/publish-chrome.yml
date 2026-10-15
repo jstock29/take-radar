@@ -1,8 +1,9 @@
 name: Publish to Chrome Web Store
 
-# Every push to main is checked and packaged. A new version is uploaded and
-# submitted for review only when manifest.json's version has no matching
-# v<version> git tag yet; the tag is created after a successful submission.
+# Every push to main is tested and packaged. A new version is uploaded and
+# submitted for review only when the tests pass and manifest.json's version
+# has no matching v<version> git tag yet; the tag is created after a
+# successful submission.
 on:
   push:
     branches: [main]
@@ -19,23 +20,16 @@ env:
   CWS_EXTENSION_ID: ijehcepecdihklcfehpobebkdmbnelkg
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # tags, and the diff for the listing-assets check
-
-      - name: Check syntax
-        run: |
-          jq empty manifest.json
-          for f in *.js; do
-            if grep -qE '^(import|export) ' "$f"; then
-              node --input-type=module --check < "$f"
-            else
-              node --check "$f"
-            fi
-          done
 
       - name: Read version
         id: version

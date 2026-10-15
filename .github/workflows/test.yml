@@ -1,0 +1,38 @@
+name: Test
+
+on:
+  pull_request:
+  workflow_call: # run by publish-chrome.yml before every release
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check manifest and syntax
+        run: |
+          jq empty manifest.json
+          for f in *.js; do
+            if grep -qE '^(import|export) ' "$f"; then
+              node --input-type=module --check < "$f"
+            else
+              node --check "$f"
+            fi
+          done
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run test:e2e

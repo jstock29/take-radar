@@ -1,5 +1,6 @@
 (() => {
-  const { ext, normalizeList, highlightStyle } = globalThis.TakeRadar ?? {};
+  const TR = globalThis.TakeRadar ?? {};
+  const { ext, normalizeList, normalizeSettings, highlightStyle, createMatcher } = TR;
   if (!ext?.runtime?.id || !document.body) return;
 
   const HIGHLIGHT_CLASS = "take-radar-highlight";
@@ -11,102 +12,51 @@
     "iframe", "canvas", "svg", "math",
   ]);
 
-  // Characters that don't decompose under NFD but should still match their
-  // plain-ASCII spelling.
-  const EXTRA_FOLDS = {
-    ø: "o", Ø: "O", ł: "l", Ł: "L", đ: "d", Đ: "D", ß: "ss",
-    æ: "ae", Æ: "AE", œ: "oe", Œ: "OE", ı: "i",
-  };
+  // The site the user sees in the address bar, even inside an iframe, so
+  // "off on this site" covers embedded frames too. (Firefox has no
+  // ancestorOrigins; there a frame falls back to its own host.)
+  const siteHost = (() => {
+    try {
+      const origins = location.ancestorOrigins;
+      if (origins?.length) return new URL(origins[origins.length - 1]).hostname;
+    } catch {}
+    return location.hostname;
+  })();
 
-  // Fold one character to a comparable form: strip accents, unify apostrophes
-  // and dashes, and drop invisible characters (soft hyphens, zero-width spaces).
-  const foldChar = (ch) => {
-    if (EXTRA_FOLDS[ch]) return EXTRA_FOLDS[ch];
-    if (/[­​-‍⁠﻿]/.test(ch)) return "";
-    if (/[‘’ʼ`´]/.test(ch)) return "'";
-    if (/[‐-―−]/.test(ch)) return "-";
-    return ch.normalize("NFD").replace(/\p{M}/gu, "");
-  };
-
-  // Fold a whole string, keeping a map from each folded char back to the
-  // original string so matches can be located in the real text.
-  const foldWithMap = (text) => {
-    let folded = "";
-    const starts = [];
-    const ends = [];
-    let i = 0;
-    for (const ch of text) {
-      const f = foldChar(ch);
-      for (let k = 0; k < f.length; k++) {
-        starts.push(i);
-        ends.push(i + ch.length);
-      }
-      folded += f;
-      i += ch.length;
-    }
-    return { folded, starts, ends };
-  };
-
-  const fold = (text) => foldWithMap(text).folded;
-
-  const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-  const NOT_WORD_BEFORE = "(?<![\\p{L}\\p{N}])";
-  const NOT_WORD_AFTER = "(?![\\p{L}\\p{N}])";
-  // What may sit between two words of a name: spaces, periods, hyphens,
-  // apostrophes — so "J.K.", "J. K." and "JK" all line up.
-  const SEP = "[\\s.'\\-]*";
-  // An optional middle initial, so "David Blight" also finds "David W. Blight".
-  const MIDDLE_INITIAL = `(?:\\p{L}(?![\\p{L}\\p{N}])\\.?${SEP})?`;
-
-  // Turn one name into a regex source string, or null if it's empty.
-  const nameToPattern = (name) => {
-    const tokens = fold(name)
-      .split(/[\s.'\-]+/)
-      .filter(Boolean);
-    if (!tokens.length) return null;
-
-    // Interior single-letter initials are covered by MIDDLE_INITIAL instead.
-    const core = tokens.filter(
-      (t, i) => i === 0 || i === tokens.length - 1 || t.length > 1,
-    );
-    const body = core
-      .map(escapeRegExp)
-      .join(core.length > 1 ? `${SEP}${MIDDLE_INITIAL}` : "");
-    return `${NOT_WORD_BEFORE}(${body})${NOT_WORD_AFTER}`;
-  };
-
-  // --- Matching ---
-
+  let lists = [];
+  let settings = normalizeSettings();
   let matcher = null;
   let styles = new Map(); // list id -> [[property, value], ...]
-  let matchKey = null; // what the matcher was built from
+  let matchKey = null; // what the current matcher and highlights were built from
 
-  const buildMatcher = (lists) => {
-    const seen = new Set();
-    const entries = [];
-    lists.forEach((list) => {
-      list.names.forEach((name) => {
-        const pattern = nameToPattern(name);
-        if (!pattern || seen.has(pattern)) return;
-        seen.add(pattern);
-        entries.push({
-          pattern,
-          length: fold(name).length,
-          listId: list.id,
-          listName: list.name,
-        });
-      });
-    });
-    if (!entries.length) return null;
+  const isActive = () => !settings.paused && !settings.disabledHosts.includes(siteHost);
 
-    // Longer names first, so "Nicholas A. Christakis" wins over "Nicholas".
-    entries.sort((a, b) => b.length - a.length);
-    return {
-      entries,
-      regex: new RegExp(entries.map((e) => e.pattern).join("|"), "giu"),
-    };
+  // --- Shadow DOM -------------------------------------------------------------
+  // Text inside shadow roots is invisible to a normal tree walk and to an
+  // observer on document.body, so every shadow root found is scanned and
+  // observed too. Closed roots are reachable from extensions in Chrome
+  // (chrome.dom) and Firefox (openOrClosedShadowRoot), not Safari.
+
+  const shadowRootOf = (el) => {
+    if (el.shadowRoot) return el.shadowRoot;
+    try {
+      return ext.dom?.openOrClosedShadowRoot?.(el) ?? el.openOrClosedShadowRoot ?? null;
+    } catch {
+      return null;
+    }
   };
+
+  // Everything we observe and search: the body plus each shadow root seen.
+  const roots = new Set([document.body]);
+  const liveRoots = () => {
+    for (const root of roots) {
+      const host = root === document.body ? root : root.host;
+      if (!host?.isConnected) roots.delete(root);
+    }
+    return roots;
+  };
+
+  // --- Highlighting -------------------------------------------------------------
 
   const applyStyle = (span) => {
     const style = styles.get(span.getAttribute(LIST_ATTR));
@@ -119,7 +69,7 @@
     const span = document.createElement("span");
     span.className = HIGHLIGHT_CLASS;
     span.textContent = text;
-    span.title = entry.listName;
+    span.title = entry.note ? `${entry.listName}\n${entry.note}` : entry.listName;
     span.setAttribute(LIST_ATTR, entry.listId);
     applyStyle(span);
     return span;
@@ -127,32 +77,18 @@
 
   const highlightTextNode = (node) => {
     const text = node.nodeValue;
-    const { folded, starts, ends } = foldWithMap(text);
-    const { regex, entries } = matcher;
+    const matches = matcher.find(text);
+    if (!matches.length) return;
 
-    regex.lastIndex = 0;
-    let frag = null;
+    const frag = document.createDocumentFragment();
     let last = 0;
-    let m;
-    while ((m = regex.exec(folded))) {
-      const groupIndex = m.findIndex((g, i) => i > 0 && g !== undefined);
-      const entry = entries[groupIndex - 1];
-      const start = starts[m.index];
-      const end = ends[m.index + m[0].length - 1];
-      if (!entry || start < last) continue;
-
-      frag ??= document.createDocumentFragment();
+    for (const { start, end, entry } of matches) {
       frag.append(text.slice(last, start), makeHighlight(text.slice(start, end), entry));
       last = end;
     }
-
-    if (frag) {
-      frag.append(text.slice(last));
-      node.replaceWith(frag);
-    }
+    frag.append(text.slice(last));
+    node.replaceWith(frag);
   };
-
-  // --- Walking the page ---
 
   // Elements whose text we never touch. Anything outside the HTML namespace
   // (SVG, MathML) is skipped too: a <span> inside an SVG <text> breaks it.
@@ -162,43 +98,71 @@
     el.classList.contains(HIGHLIGHT_CLASS) ||
     el.isContentEditable;
 
+  // Walk up through ancestors, crossing out of shadow roots into their hosts.
   const insideOffLimits = (el) => {
-    for (let e = el; e; e = e.parentElement) if (isOffLimits(e)) return true;
+    for (let e = el; e; e = e.parentElement ?? e.getRootNode()?.host ?? null) {
+      if (isOffLimits(e)) return true;
+    }
     return false;
   };
 
-  const highlightIn = (root) => {
-    if (!matcher || !root?.isConnected) return;
-    if (root.nodeType === Node.TEXT_NODE) {
-      if (root.parentElement && !insideOffLimits(root.parentElement)) {
-        highlightTextNode(root);
-      }
-      return;
-    }
-    if (root.nodeType !== Node.ELEMENT_NODE || insideOffLimits(root)) return;
+  const watch = (root) => {
+    if (roots.has(root)) return;
+    roots.add(root);
+    observer.observe(root, OBSERVE_OPTIONS);
+  };
 
+  // Highlight every text node under root (an element or shadow root),
+  // descending into shadow roots along the way.
+  const scan = (root) => {
+    const shadows = [];
+    if (root.nodeType === Node.ELEMENT_NODE) {
+      const own = shadowRootOf(root);
+      if (own) shadows.push(own);
+    }
     // Rejecting an element prunes its whole subtree, so each node is only
     // checked once instead of walking up to the root for every text node.
     const walker = document.createTreeWalker(
       root,
       NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
       {
-        acceptNode: (node) =>
-          node.nodeType === Node.ELEMENT_NODE
-            ? isOffLimits(node)
-              ? NodeFilter.FILTER_REJECT
-              : NodeFilter.FILTER_SKIP
-            : node.nodeValue.trim()
-              ? NodeFilter.FILTER_ACCEPT
-              : NodeFilter.FILTER_SKIP,
+        acceptNode: (node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            return node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+          }
+          if (isOffLimits(node)) return NodeFilter.FILTER_REJECT;
+          const shadow = shadowRootOf(node);
+          if (shadow) shadows.push(shadow);
+          return NodeFilter.FILTER_SKIP;
+        },
       },
     );
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
     nodes.forEach(highlightTextNode);
+
+    shadows.forEach((shadow) => {
+      watch(shadow);
+      scan(shadow);
+    });
   };
 
-  const allHighlights = () => document.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
+  const highlightIn = (node) => {
+    if (!matcher || !node?.isConnected) return;
+    // The element that decides whether this node is off limits. Text sitting
+    // directly in a shadow root has no parent element, only the root's host.
+    let owner = null;
+    if (node.nodeType === Node.TEXT_NODE) owner = node.parentElement ?? node.parentNode?.host;
+    else if (node.nodeType === Node.ELEMENT_NODE) owner = node;
+    else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) owner = node.host;
+    if (!owner || insideOffLimits(owner)) return;
+
+    if (node.nodeType === Node.TEXT_NODE) highlightTextNode(node);
+    else scan(node);
+  };
+
+  const allHighlights = () =>
+    [...liveRoots()].flatMap((root) => [...root.querySelectorAll(`.${HIGHLIGHT_CLASS}`)]);
 
   const clearHighlights = () => {
     const parents = new Set();
@@ -209,7 +173,19 @@
     parents.forEach((p) => p?.normalize());
   };
 
-  // --- Watching the page for new content ---
+  // --- Match count for the toolbar badge -----------------------------------------
+
+  let lastReport = null;
+  const report = () => {
+    const off = !isActive();
+    const count = off ? 0 : allHighlights().length;
+    const key = off ? "off" : count;
+    if (key === lastReport) return;
+    lastReport = key;
+    ext.runtime.sendMessage({ type: "count", count, off })?.catch?.(() => {});
+  };
+
+  // --- Watching the page for new content ---------------------------------------
 
   const OBSERVE_OPTIONS = { childList: true, subtree: true, characterData: true };
   const pending = new Set();
@@ -221,15 +197,16 @@
     try {
       fn();
     } finally {
-      observer.observe(document.body, OBSERVE_OPTIONS);
+      liveRoots().forEach((root) => observer.observe(root, OBSERVE_OPTIONS));
     }
   };
 
   const flush = () => {
     flushTimer = null;
-    const roots = [...pending];
+    const nodes = [...pending];
     pending.clear();
-    quietly(() => roots.forEach(highlightIn));
+    quietly(() => nodes.forEach(highlightIn));
+    report();
   };
 
   const observer = new MutationObserver((records) => {
@@ -241,31 +218,52 @@
     if (pending.size && !flushTimer) flushTimer = setTimeout(flush, 200);
   });
 
-  const refresh = (rawLists) => {
-    const lists = (Array.isArray(rawLists) ? rawLists : []).map(normalizeList);
-    styles = new Map(lists.map((l) => [l.id, highlightStyle(l)]));
+  // --- Settings and lists ------------------------------------------------------
+
+  const update = () => {
+    const active = isActive();
+    styles = new Map(lists.map((l) => [l.id, highlightStyle(l, { base: true })]));
 
     // A style-only change (e.g. dragging a color) just repaints existing
     // highlights instead of re-scanning the page.
-    const key = JSON.stringify(lists.map((l) => [l.id, l.name, l.names]));
+    const key = active ? JSON.stringify(lists.map((l) => [l.id, l.name, l.names])) : "off";
     if (key === matchKey) {
       allHighlights().forEach(applyStyle);
       return;
     }
     matchKey = key;
-    matcher = buildMatcher(lists);
+    matcher = active ? createMatcher(lists) : null;
     quietly(() => {
       clearHighlights();
-      highlightIn(document.body);
+      if (matcher) highlightIn(document.body);
     });
+    report();
   };
 
-  ext.storage.local.get("lists").then(
-    (data) => refresh(data?.lists),
+  ext.storage.local.get(["lists", "settings"]).then(
+    (data) => {
+      lists = (Array.isArray(data?.lists) ? data.lists : []).map(normalizeList);
+      settings = normalizeSettings(data?.settings);
+      update();
+    },
     () => {}, // Extension reloaded or storage unavailable; nothing to do.
   );
 
   ext.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.lists) refresh(changes.lists.newValue);
+    if (area !== "local" || !(changes.lists || changes.settings)) return;
+    if (changes.lists) {
+      lists = (changes.lists.newValue ?? []).map(normalizeList);
+    }
+    if (changes.settings) settings = normalizeSettings(changes.settings.newValue);
+    update();
+  });
+
+  // Back/forward cache restores a page without re-running this script, and
+  // the badge was reset for the navigation in between.
+  window.addEventListener("pageshow", (e) => {
+    if (e.persisted) {
+      lastReport = null;
+      report();
+    }
   });
 })();
