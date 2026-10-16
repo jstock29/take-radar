@@ -1,9 +1,10 @@
 name: Publish to Chrome Web Store
 
-# Every push to main is tested and packaged. A new version is uploaded and
-# submitted for review only when the tests pass and manifest.json's version
-# has no matching v<version> git tag yet; the tag is created after a
-# successful submission.
+# Every push to main is tested and packaged. When the tests pass and
+# manifest.json's version has no v<version> tag yet, the publish script asks
+# the store what it already has: a version that's already published or
+# submitted (e.g. by hand in the dashboard) is just tagged; otherwise it's
+# uploaded, submitted for review, and then tagged.
 on:
   push:
     branches: [main]
@@ -27,7 +28,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # tags, and the diff for the listing-assets check
 
@@ -47,7 +48,7 @@ jobs:
         id: package
         run: echo "zip=$(scripts/package.sh)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: take-radar-${{ steps.version.outputs.version }}
           path: ${{ steps.package.outputs.zip }}
@@ -74,11 +75,11 @@ jobs:
         run: scripts/cws-publish.sh "${{ steps.package.outputs.zip }}"
 
       - name: Tag release
-        if: steps.version.outputs.release == 'true'
+        if: steps.version.outputs.release == 'true' && steps.publish.outputs.done == 'true'
         run: |
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
-          echo "Submitted v${{ steps.version.outputs.version }} for review (state: ${{ steps.publish.outputs.state }})." >> "$GITHUB_STEP_SUMMARY"
+          echo "v${{ steps.version.outputs.version }} is in the Chrome Web Store (state: ${{ steps.publish.outputs.state }})." >> "$GITHUB_STEP_SUMMARY"
 
       # The API can't change listing text or images, so flag when they change.
       - name: Flag listing changes
