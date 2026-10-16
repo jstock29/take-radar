@@ -707,3 +707,87 @@ textarea.readonly {
 .url-error:empty {
   display: none;
 }
+
+/* --- Per-list options ------------------------------------------------------------- */
+
+.options {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.check input {
+  flex: none;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.check > span {
+  display: flex;
+  flex-direction: column;
+}
+.check-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+.list.disabled .list-header .chip,
+.list.disabled .list-name {
+  opacity: 0.45;
+}
+
+/* --- On this page ---------------------------------------------------------------- */
+
+.on-page {
+  margin-bottom: 10px;
+}
+.on-page .section-label {
+  margin-top: 0;
+}
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.person:hover {
+  background: var(--card);
+}
+.person-name {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.person-lists {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.person-count {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.person-more {
+  padding: 2px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}

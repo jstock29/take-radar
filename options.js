@@ -10,6 +10,7 @@ const {
   toHex8,
   toCss,
   highlightStyle,
+  combinedHighlightStyle,
   MAX_BORDER_WIDTH,
   STARTERS,
 } = globalThis.TakeRadar;
@@ -130,8 +131,11 @@ function renderList(list, { open = false } = {}) {
   });
 
   const count = el("span", { className: "count" });
-  const updateCount = () =>
-    (count.textContent = `${list.names.length} name${list.names.length === 1 ? "" : "s"}`);
+  const updateCount = () => {
+    const n = list.names.length;
+    count.textContent = list.enabled === false ? "Hidden" : `${n} name${n === 1 ? "" : "s"}`;
+    card.classList.toggle("disabled", list.enabled === false);
+  };
 
   const toggle = el("button", {
     type: "button",
@@ -350,9 +354,44 @@ function renderList(list, { open = false } = {}) {
     renderSync();
   });
 
+  // Options ---------------------------------------------------------------------
+
+  const checkbox = (labelText, hint, checked, onChange) => {
+    const input = el("input", { type: "checkbox", checked });
+    input.addEventListener("change", () => onChange(input.checked));
+    return el(
+      "label",
+      { className: "check" },
+      input,
+      el("span", {}, el("span", { textContent: labelText }), el("span", { className: "check-hint", textContent: hint })),
+    );
+  };
+
+  const options = el(
+    "div",
+    { className: "options" },
+    checkbox("Highlight this list", "Turn off to hide it without deleting it.", list.enabled !== false, (on) => {
+      if (on) delete list.enabled;
+      else list.enabled = false;
+      updateCount();
+      scheduleSave();
+    }),
+    checkbox(
+      "Also highlight later mentions by last name",
+      "After a full name appears on a page, e.g. \u201cMs. Okafor said\u201d",
+      list.followups !== false,
+      (on) => {
+        if (on) delete list.followups;
+        else list.followups = false;
+        scheduleSave();
+      },
+    ),
+  );
+
   const body = el(
     "div",
     { className: "list-body" },
+    options,
     preview,
     el("div", { className: "section-label", textContent: "Style" }),
     presets,
@@ -630,6 +669,51 @@ powerBtn.addEventListener("click", () => {
   renderPower();
 });
 
+// --- On this page -----------------------------------------------------------------------
+
+const onPageEl = document.getElementById("onPage");
+let currentTabId = null;
+
+const MAX_PEOPLE_SHOWN = 12;
+
+async function renderOnPage() {
+  if (currentTabId == null || settings.paused) {
+    onPageEl.hidden = true;
+    return;
+  }
+  const people = await ext.runtime
+    .sendMessage({ type: "page-summary", tabId: currentTabId })
+    .catch(() => []);
+  const byId = new Map(lists.map((l) => [l.id, l]));
+  const known = (people ?? []).filter((p) => p.lists.some((id) => byId.has(id)));
+  onPageEl.hidden = !known.length;
+  if (!known.length) return;
+
+  const rows = known.slice(0, MAX_PEOPLE_SHOWN).map((person) => {
+    const onLists = person.lists.map((id) => byId.get(id)).filter(Boolean);
+    const chip = el("span", { className: "person-name", textContent: person.name });
+    combinedHighlightStyle(onLists).forEach(([prop, value]) => chip.style.setProperty(prop, value));
+    const button = el(
+      "button",
+      { type: "button", className: "person", title: "Show on the page" },
+      chip,
+      el("span", { className: "person-lists", textContent: onLists.map((l) => l.name).join(", ") }),
+      el("span", { className: "person-count", textContent: person.count > 1 ? `\u00d7${person.count}` : "" }),
+    );
+    // Each click scrolls the page to the next mention of this person.
+    button.addEventListener("click", () => {
+      ext.tabs.sendMessage(currentTabId, { type: "reveal", name: person.name }).catch(() => {});
+    });
+    return button;
+  });
+  const more = known.length - MAX_PEOPLE_SHOWN;
+  onPageEl.replaceChildren(
+    el("div", { className: "section-label", textContent: `On this page \u00b7 ${known.length}` }),
+    ...rows,
+    ...(more > 0 ? [el("div", { className: "person-more", textContent: `and ${more} more` })] : []),
+  );
+}
+
 // --- Pickers, keys and loading --------------------------------------------------------
 
 // Clicking outside a color picker closes it.
@@ -649,8 +733,17 @@ document.addEventListener("keydown", (e) => {
 
 // Pick up changes made elsewhere: names refreshed by the background script,
 // or the pause shortcut pressed while this page is open.
+// Pages re-highlight after any list or setting change; give them a moment,
+// then refresh "On this page".
+let onPageTimer = null;
+const refreshOnPageSoon = () => {
+  clearTimeout(onPageTimer);
+  onPageTimer = setTimeout(renderOnPage, 600);
+};
+
 ext.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
+  if (changes.lists || changes.settings) refreshOnPageSoon();
   if (changes.settings) {
     settings = normalizeSettings(changes.settings.newValue);
     renderPower();
@@ -680,11 +773,15 @@ ext.storage.onChanged.addListener((changes, area) => {
 
   // The page the popup was opened over (unknown when opened as a tab).
   const url = tabs?.[0]?.url;
-  if (url && /^https?:/.test(url)) currentHost = new URL(url).hostname;
+  if (url && /^https?:/.test(url)) {
+    currentHost = new URL(url).hostname;
+    currentTabId = tabs[0].id;
+  }
   shortcut = commands?.find((c) => c.name === "toggle-pause")?.shortcut ?? "";
 
   lists.forEach((list) => listsEl.append(renderList(list)));
   renderEmptyState();
   renderStarters();
   renderPower();
+  renderOnPage();
 })();

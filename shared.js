@@ -167,7 +167,9 @@
   /**
    * Bring a stored list up to the current shape. Versions before 0.4 stored
    * a single opaque `color`; that becomes the fill. A list synced from a URL
-   * carries `source: { url, updatedAt, error }`.
+   * carries `source: { url, updatedAt, error }`. `enabled: false` hides a
+   * list without deleting it; `followups: false` turns off last-name-only
+   * matches for it.
    */
   const normalizeList = (list = {}) => {
     const fill = parseColor(list.fill) ?? parseColor(list.color);
@@ -180,6 +182,9 @@
       borderWidth: clamp(Math.round(Number(list.borderWidth) || 0), 0, MAX_BORDER_WIDTH),
       names: Array.isArray(list.names) ? list.names.filter((n) => typeof n === "string") : [],
     };
+    // Both default to on; only `false` is stored.
+    if (list.enabled === false) out.enabled = false;
+    if (list.followups === false) out.followups = false;
     if (typeof list.starterId === "string") out.starterId = list.starterId;
     if (list.source && typeof list.source.url === "string") {
       out.source = {
@@ -241,6 +246,47 @@
     return style;
   };
 
+  const STRIPE_PX = 5;
+
+  /**
+   * Style for a name that's on several lists: diagonal stripes of each
+   * list's fill, and one border ring per list that has a border, nested
+   * outward in list order. A single list gets its normal style.
+   */
+  const combinedHighlightStyle = (lists, { base = false } = {}) => {
+    if (lists.length === 1) return highlightStyle(lists[0], { base });
+
+    const fills = lists.map((l) => parseColor(l.fill) ?? parseColor(DEFAULT_FILL));
+    const stops = lists
+      .map((l, i) => `${toCss(l.fill)} ${i * STRIPE_PX}px ${(i + 1) * STRIPE_PX}px`)
+      .join(", ");
+
+    let spread = 0;
+    const rings = [];
+    for (const l of lists) {
+      const border = parseColor(l.border);
+      if (l.borderWidth > 0 && border?.a > 0) {
+        spread += l.borderWidth;
+        rings.push(`0 0 0 ${spread}px ${toCss(l.border)}`);
+      }
+    }
+
+    const style = [
+      ...(base ? BASE_STYLE : []),
+      ["background-color", "transparent"],
+      ["background-image", `repeating-linear-gradient(135deg, ${stops})`],
+      ["box-shadow", rings.length ? rings.join(", ") : "none"],
+      ["margin", spread ? `0 ${spread}px` : "0"],
+    ];
+    // Force a text color only if every stripe is solid enough to sit on,
+    // and pick it for the average of the stripe colors.
+    if (fills.every((f) => f.a >= 0.5)) {
+      const avg = (k) => fills.reduce((sum, f) => sum + f[k], 0) / fills.length;
+      style.push(["color", contrastText({ r: avg("r"), g: avg("g"), b: avg("b") })]);
+    }
+    return style;
+  };
+
   Object.assign((globalThis.TakeRadar ??= {}), {
     ext,
     DEFAULT_FILL,
@@ -260,5 +306,6 @@
     normalizeList,
     normalizeSettings,
     highlightStyle,
+    combinedHighlightStyle,
   });
 })();

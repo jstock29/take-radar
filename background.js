@@ -99,8 +99,8 @@ async function refreshLists(ids) {
 
 // --- Match count badge -----------------------------------------------------------
 
-// tabId -> Map(frameId -> { count, off }). Mirrored to storage.session so it
-// survives the service worker going to sleep.
+// tabId -> Map(frameId -> { count, off, people }). Mirrored to
+// storage.session so it survives the service worker going to sleep.
 const counts = new Map();
 let restored = null;
 
@@ -136,12 +136,31 @@ function paintBadge(tabId) {
   catchAll(action.setBadgeTextColor?.({ tabId, color: off ? "#ffffff" : "#000000" }));
 }
 
-async function setCount(tabId, frameId, { count, off }) {
+async function setCount(tabId, frameId, { count, off, people }) {
   await restoreCounts();
   if (!counts.has(tabId)) counts.set(tabId, new Map());
-  counts.get(tabId).set(frameId, { count: Number(count) || 0, off: Boolean(off) });
+  counts.get(tabId).set(frameId, {
+    count: Number(count) || 0,
+    off: Boolean(off),
+    people: Array.isArray(people) ? people.slice(0, 500) : [],
+  });
   paintBadge(tabId);
   persistCounts();
+}
+
+// Everyone found in a tab, merged across its frames, most-mentioned first.
+async function pageSummary(tabId) {
+  await restoreCounts();
+  const merged = new Map();
+  for (const frame of counts.get(tabId)?.values() ?? []) {
+    if (frame.off) continue;
+    for (const person of frame.people ?? []) {
+      const seen = merged.get(person.name);
+      if (seen) seen.count += person.count;
+      else merged.set(person.name, { ...person });
+    }
+  }
+  return [...merged.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
 async function forgetTab(tabId) {
@@ -163,6 +182,10 @@ ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "count" && sender.tab?.id != null) {
     setCount(sender.tab.id, sender.frameId ?? 0, msg);
     return false;
+  }
+  if (msg?.type === "page-summary") {
+    pageSummary(msg.tabId).then(sendResponse, () => sendResponse([]));
+    return true;
   }
   if (msg?.type === "refresh-lists") {
     refreshLists(msg.ids).then(sendResponse, (err) => sendResponse({ error: String(err) }));

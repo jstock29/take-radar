@@ -32,6 +32,15 @@ const PAGES = {
     <script>setTimeout(() => (document.getElementById("late").textContent = "Later: John Roe"), 300)</script>
   </body>`,
 
+  "/news.html": `<!doctype html><title>News</title><body style="font: 16px sans-serif">
+    <p id="p1">Celinda Lake, a pollster, and Doug Heye, a strategist, disagreed.</p>
+    <p id="p2">"It's close," Ms. Lake said. Heye was less sure. They met at Lake Tahoe.</p>
+    <div style="height: 3000px"></div>
+    <p id="bottom">At the end, Doug Heye spoke again.</p>
+    <div id="late"></div>
+    <script>setTimeout(() => (document.getElementById("late").textContent = "Mr. Heye left early."), 300)</script>
+  </body>`,
+
   "/shadow.html": `<!doctype html><title>Shadow</title><body>
     <div id="open-host"></div><div id="closed-host"></div><div id="late-host"></div>
     <script>
@@ -133,6 +142,16 @@ const waitForHighlights = async (page, expected) => {
   assert.deepEqual(await highlights(page), want);
 };
 
+// The hover card's visible text, line by line (null if it isn't showing).
+const hoverCard = async (page) => {
+  await page.waitForFunction(() => document.querySelector("take-radar-card")?.style.visibility === "visible");
+  return page.evaluate(() =>
+    [...document.querySelector("take-radar-card").shadowRoot.querySelectorAll(".name, .sub, .list, .note")].map(
+      (n) => n.textContent,
+    ),
+  );
+};
+
 const badgeFor = (page) =>
   worker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -153,8 +172,11 @@ test("highlights names, skips editable areas and SVG, and catches late content",
   const page = await openPage("/article.html");
   await waitForHighlights(page, ["Jane Doe", "John Roe", "Ruth A. Okafor", "John Roe"]);
 
-  const title = await page.$eval("#plain .take-radar-highlight", (s) => s.title);
-  assert.equal(title, "People\na note about Jane");
+  // Hovering shows the card with the list and the note.
+  await page.hover("#plain .take-radar-highlight");
+  assert.deepEqual(await hoverCard(page), ["Jane Doe", "People", "a note about Jane"]);
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(() => document.querySelector("take-radar-card").style.visibility === "hidden");
   await page.close();
 });
 
@@ -283,5 +305,117 @@ test("the panel's on/off switch pauses highlighting", async () => {
   await panel.click("#powerBtn");
   await panel.waitForTimeout(200);
   assert.equal((await getStorage("settings")).settings.paused, false);
+  await panel.close();
+});
+
+// --- Names on several lists, and later mentions -----------------------------------------
+
+const GOP = {
+  id: "r",
+  name: "Republican operatives",
+  fill: "#ff3b3026",
+  border: "#ff3b30ff",
+  borderWidth: 1,
+  names: ["Doug Heye | GOP strategist", "Celinda Lake"],
+};
+const DEM = {
+  id: "d",
+  name: "Democratic operatives",
+  fill: "#0a84ff26",
+  border: "#0a84ffff",
+  borderWidth: 1,
+  names: ["Celinda Lake | Democratic pollster"],
+};
+const NEWS_ALL = ["Celinda Lake", "Doug Heye", "Doug Heye", "Heye", "Heye", "Lake"];
+
+test("a name on two lists is hatched, and the card shows both lists", async () => {
+  await reset({ lists: [GOP, DEM] });
+  const page = await openPage("/news.html");
+  await waitForHighlights(page, NEWS_ALL);
+
+  const lake = page.locator("#p1 .take-radar-highlight", { hasText: "Celinda Lake" });
+  assert.equal(await lake.getAttribute("data-take-radar-list"), "r,d");
+  assert.match(await lake.evaluate((s) => getComputedStyle(s).backgroundImage), /repeating-linear-gradient/);
+  assert.match(await lake.evaluate((s) => getComputedStyle(s).boxShadow), /rgb\(255, 59, 48\).*rgb\(10, 132, 255\)/);
+
+  await lake.hover();
+  assert.deepEqual(await hoverCard(page), [
+    "Celinda Lake",
+    "Republican operatives",
+    "Democratic operatives",
+    "Democratic pollster",
+  ]);
+  await page.close();
+});
+
+test("later mentions by last name are highlighted, but not look-alikes", async () => {
+  await reset({ lists: [GOP, DEM] });
+  const page = await openPage("/news.html");
+  // "Ms. Lake" and both "Heye" mentions (one added late); not "Lake Tahoe".
+  await waitForHighlights(page, NEWS_ALL);
+
+  await page.locator("#p2 .take-radar-highlight", { hasText: "Heye" }).hover();
+  assert.deepEqual(await hoverCard(page), [
+    "Doug Heye",
+    "Mentioned by last name",
+    "Republican operatives",
+    "GOP strategist",
+  ]);
+  await page.close();
+});
+
+test("a list can turn off last-name matches, or be hidden entirely", async () => {
+  await reset({ lists: [{ ...GOP, followups: false }, DEM] });
+  const page = await openPage("/news.html");
+  // Heye is only on the list with follow-ups off; Lake is also on DEM.
+  await waitForHighlights(page, ["Celinda Lake", "Doug Heye", "Doug Heye", "Lake"]);
+
+  await setStorage({ lists: [{ ...GOP, enabled: false }, DEM] });
+  await waitForHighlights(page, ["Celinda Lake", "Lake"]);
+  assert.equal(await page.getAttribute("#p1 .take-radar-highlight", "data-take-radar-list"), "d");
+  await page.close();
+});
+
+test("the popup can list who's on the page and scroll to each mention", async () => {
+  await reset({ lists: [GOP, DEM] });
+  const page = await openPage("/news.html");
+  await waitForHighlights(page, NEWS_ALL);
+  await page.waitForTimeout(400); // the count report is debounced
+
+  const tabId = await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    return tab.id;
+  });
+  const panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/options.html`);
+  const people = await panel.evaluate((id) => chrome.runtime.sendMessage({ type: "page-summary", tabId: id }), tabId);
+  assert.deepEqual(people, [
+    { name: "Doug Heye", lists: ["r"], count: 4 },
+    { name: "Celinda Lake", lists: ["r", "d"], count: 2 },
+  ]);
+  await panel.close();
+
+  // Each reveal moves to the next mention; one of them is far down the page.
+  let deepest = 0;
+  for (let i = 0; i < 4; i++) {
+    await worker.evaluate(({ id }) => chrome.tabs.sendMessage(id, { type: "reveal", name: "Doug Heye" }), { id: tabId });
+    await page.waitForTimeout(700);
+    deepest = Math.max(deepest, await page.evaluate(() => scrollY));
+  }
+  assert.ok(deepest > 1500, `never scrolled to the mention at the bottom (max scrollY ${deepest})`);
+  await page.close();
+});
+
+test("the per-list switches in the panel save", async () => {
+  await reset({ lists: [GOP] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+  await panel.getByLabel("Highlight this list").uncheck();
+  await panel.getByLabel(/later mentions by last name/).uncheck();
+  await panel.waitForTimeout(400);
+  const { lists } = await getStorage("lists");
+  assert.equal(lists[0].enabled, false);
+  assert.equal(lists[0].followups, false);
+  assert.equal(await panel.textContent(".list .count"), "Hidden");
   await panel.close();
 });
