@@ -107,37 +107,57 @@
   const keyOf = (s, n) => s.slice(0, n).toLowerCase();
 
   /**
-   * Build a matcher for a set of normalized lists. Returns null when there's
-   * nothing to match. `find(text)` returns non-overlapping matches as
-   * { start, end, entry } with offsets into the original text; entry has
-   * { listId, listName, name, note }.
+   * Build a matcher for a set of normalized lists (disabled lists are left
+   * out). Returns null when there's nothing to match. `find(text)` returns
+   * non-overlapping matches as { start, end, entry } with offsets into the
+   * original text.
+   *
+   * A name on several lists is one entry, carrying every list it's on in
+   * list order: entry = { id, name, lists: [{ listId, listName, note }],
+   * followups }. Spellings that compile to the same pattern ("Ruth Okafor",
+   * "Ruth A. Okafor") count as the same name.
    */
   const createMatcher = (lists) => {
-    const seen = new Set();
+    const bySource = new Map();
     const entries = [];
     lists.forEach((list) => {
+      if (list.enabled === false) return;
       list.names.forEach((line) => {
         const { name, note } = TR.splitEntry(line);
         const compiled = compileName(name);
-        if (!compiled || seen.has(compiled.source)) return;
-        seen.add(compiled.source);
-        entries.push({
-          regex: new RegExp(compiled.source, "iy"),
-          key: keyOf(compiled.firstToken, 2),
-          length: fold(name).length,
-          listId: list.id,
-          listName: list.name,
-          name,
-          note,
-        });
+        if (!compiled) return;
+        // Matching ignores case, so merging must too ("jane doe" is Jane Doe).
+        const key = compiled.source.toLowerCase();
+        let entry = bySource.get(key);
+        if (!entry) {
+          entry = {
+            id: entries.length,
+            regex: new RegExp(compiled.source, "iy"),
+            key: keyOf(compiled.firstToken, 2),
+            length: fold(name).length,
+            name,
+            lists: [],
+            followups: false,
+          };
+          bySource.set(key, entry);
+          entries.push(entry);
+        }
+        const onList = entry.lists.find((l) => l.listId === list.id);
+        if (onList) {
+          // Listed twice on the same list: keep the first note found.
+          if (!onList.note && note) onList.note = note;
+          return;
+        }
+        entry.lists.push({ listId: list.id, listName: list.name, note });
+        if (list.followups !== false) entry.followups = true;
       });
     });
     if (!entries.length) return null;
 
     // Longer names first, so "Nicholas A. Christakis" wins over "Nicholas".
-    entries.sort((a, b) => b.length - a.length);
+    const ordered = [...entries].sort((a, b) => b.length - a.length);
     const buckets = new Map();
-    for (const entry of entries) {
+    for (const entry of ordered) {
       if (!buckets.has(entry.key)) buckets.set(entry.key, []);
       buckets.get(entry.key).push(entry);
     }
@@ -177,5 +197,110 @@
     return { entries, find };
   };
 
-  Object.assign(TR, { fold, createMatcher });
+  // --- Later mentions by last name ------------------------------------------------
+  // News writing names someone in full once ("Celinda Lake, a Democratic
+  // pollster") and by surname after that ("Ms. Lake said"). Once a full name
+  // has been found on a page, its surname alone is highlighted too.
+
+  const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
+  const HONORIFICS = new Set([
+    "mr", "mrs", "ms", "mx", "dr", "prof", "sen", "senator", "rep", "gov",
+    "governor", "president", "secretary", "judge", "justice", "gen", "col",
+  ]);
+
+  /** The surname used for later mentions, or null if the name has none. */
+  const surnameOf = (name) => {
+    const words = fold(name).trim().split(/\s+/);
+    while (words.length > 1 && SUFFIXES.has(words.at(-1).replace(/[.,]/g, "").toLowerCase())) {
+      words.pop();
+    }
+    if (words.length < 2) return null;
+    const surname = words.at(-1).replace(/[.,]+$/, "");
+    // Short or lowercase "surnames" are too likely to be ordinary words.
+    if (surname.length < 3 || !/^\p{Lu}/u.test(surname)) return null;
+    return surname;
+  };
+
+  const isUpper = (ch) => /\p{Lu}/u.test(ch ?? "");
+
+  // Surnames that are also everyday words. At the start of a sentence these
+  // are more likely the word ("Short of that, ...") than the person, so
+  // there they need an honorific ("Mr. Short said").
+  const COMMON_WORDS = new Set(
+    (
+      "bell best bird black bliss bloom brown burns bush cash case chase cook " +
+      "cooper cross day dean english fair field fish ford fox frank free " +
+      "friend gay gold good grace gray green grey hall hand hart hay heart " +
+      "hill hope house hunt king lake lamb land lane law little long love " +
+      "major march mark marsh mason may miller moody moon more north page " +
+      "park parker pope power price reed rich rice rose ross sharp short " +
+      "small smart snow south spain spring stark steel stone story strong " +
+      "summer swift taylor tower turner walker wall ward warren waters " +
+      "weaver well wells west white wise wolf wood woods young"
+    ).split(" "),
+  );
+
+  /**
+   * A matcher for the surnames of entries already found on the page. A
+   * surname shared by two found people ("Stan Greenberg", "Anna Greenberg")
+   * is skipped as ambiguous. Matches are case-sensitive and skipped when
+   * they look like part of a longer proper name ("Lake Tahoe", "Great Salt
+   * Lake"); honorifics before them are fine ("Ms. Lake", "Sen Short").
+   */
+  const createFollowupMatcher = (foundEntries) => {
+    const bySurname = new Map();
+    for (const entry of foundEntries) {
+      if (!entry.followups) continue;
+      const surname = surnameOf(entry.name);
+      if (!surname) continue;
+      if (!bySurname.has(surname)) bySurname.set(surname, []);
+      bySurname.get(surname).push(entry);
+    }
+    const usable = [...bySurname].filter(([, list]) => list.length === 1);
+    if (!usable.length) return null;
+
+    const entryFor = new Map(usable.map(([surname, [entry]]) => [surname, entry]));
+    const regex = new RegExp(
+      `(?<![\\p{L}\\p{N}\\-'])(?:${usable.map(([s]) => escapeRegExp(s)).join("|")})(?![\\p{L}\\p{N}])`,
+      "gu",
+    );
+
+    const find = (text) => {
+      const { folded, starts, ends } = foldWithMap(text);
+      const found = [];
+      regex.lastIndex = 0;
+      let m;
+      while ((m = regex.exec(folded))) {
+        const i = m.index;
+        const end = i + m[0].length;
+
+        // The word after: "Lake Tahoe" is a place, not Ms. Lake.
+        const after = /^ +(\S)/.exec(folded.slice(end, end + 3));
+        if (after && isUpper(after[1])) continue;
+
+        // The word before: a capitalized word that isn't an honorific and
+        // doesn't end a sentence suggests a different full name.
+        const before = /(\S+)( +)$/.exec(folded.slice(Math.max(0, i - 40), i));
+        const word = before?.[1] ?? "";
+        const afterHonorific = HONORIFICS.has(word.replace(/[.,]+$/, "").toLowerCase());
+        const opensQuote = /["“(]$/.test(folded.slice(Math.max(0, i - 1), i));
+        if (before && !opensQuote) {
+          const endsClause = /[.!?:;,"“”)\]]$/.test(word);
+          if (isUpper(word[0]) && !afterHonorific && !endsClause) continue;
+        }
+
+        // Everyday-word surnames need more than a capital letter at the
+        // start of a sentence (or of the text, or of a quote).
+        const sentenceStart = !before || opensQuote || /[.!?]["”)]*$/.test(word);
+        if (sentenceStart && !afterHonorific && COMMON_WORDS.has(m[0].toLowerCase())) continue;
+
+        found.push({ start: starts[i], end: ends[end - 1], entry: entryFor.get(m[0]) });
+      }
+      return found;
+    };
+
+    return { find };
+  };
+
+  Object.assign(TR, { fold, createMatcher, createFollowupMatcher, surnameOf });
 })();

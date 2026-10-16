@@ -3,7 +3,19 @@
 Highlights names from your lists on every page you visit. Each list gets its
 own highlight style: a fill, an optional border, and opacity for both, so a
 list can be a solid marker, a light tint, or just a box around the name.
-Hovering a highlight shows the list it came from and an optional note.
+Hovering a highlight shows a card with every list the person is on and any
+notes.
+
+- **Names on several lists** are hatched with each list's fill, with one
+  border ring per list that has a border.
+- **Later mentions by last name** ("Ms. Lake said") are highlighted once the
+  full name has appeared on the page. Surnames that also belong to another
+  person found on the page are skipped, as are look-alikes such as
+  "Lake Tahoe". Surnames that are everyday words ("Short", "Law") need an
+  honorific at the start of a sentence. Can be turned off per list.
+- **On this page**: the popup lists who was found on the current tab; click
+  a name to scroll to each mention in turn.
+- **Hide a list** without deleting it.
 
 - **Starter lists**, all opt-in: Republican operatives, Democratic
   operatives, and the Harper's Letter signatories (see `lists/`).
@@ -125,9 +137,11 @@ npm run test:e2e    # loads the packaged extension in Chromium
 
 `storage.local`:
 
-- `lists: [{ id, name, fill, border, borderWidth, names, starterId?, source? }]`.
+- `lists: [{ id, name, fill, border, borderWidth, names, enabled?, followups?, starterId?, source? }]`.
   `fill` and `border` are `#rrggbbaa`; `names` are lines in the list format
   above; `source: { url, updatedAt, error }` marks a list synced from a URL.
+  `enabled` and `followups` are only stored as `false` (hidden list; no
+  last-name matches).
 - `settings: { paused, disabledHosts }`.
 
 Lists saved by 0.3 had only a `color` field. They still load, and they're

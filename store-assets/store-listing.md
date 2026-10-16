@@ -18,6 +18,10 @@ Starter lists are kept up to date automatically. Add any of them, or none, and m
 
 FEATURES
 • Unlimited lists, each with its own highlight style
+• A name on more than one list is striped in each list's color, and its hover card shows every list
+• Later mentions by last name ("Ms. Lake said") are highlighted too, once the full name has appeared
+• See who's on the current page from the toolbar, and jump to each mention
+• Hide a list without deleting it
 • Fill and border colors with adjustable opacity: a solid marker, a light tint, a box around the name, or a mix
 • One-click presets, plus a full color picker
 • Small spelling differences still match: accents (Tomas / Tomás), middle initials (Ruth A. Okafor), and initials written different ways (J.K. / JK / J. K.)
