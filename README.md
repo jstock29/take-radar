@@ -110,8 +110,16 @@ One-time setup:
    - secret `CWS_SERVICE_ACCOUNT_KEY`: the JSON key's contents
    - variable `CWS_PUBLISHER_ID`: from the dashboard's **Publisher → Settings**
 
-An upload fails while another version is still in review. Wait for that
-review to finish, or cancel it in the dashboard, then re-run the workflow.
+Before uploading, the publish script asks the store what it has. A version
+that's already published or submitted (for example, one you submitted by
+hand in the dashboard) isn't uploaded again; the workflow just tags it. If
+a different version is still in review, the run stops and says so; wait
+for the review, or cancel it in the dashboard, then re-run the workflow.
+
+If the upload works but submitting fails, the version is left as a draft
+in the dashboard. That usually means the dashboard needs something first,
+such as justifications for new permissions. Fix that and submit the draft
+there; the next run sees it and tags the release.
 
 ## Development
 
