@@ -206,6 +206,7 @@
       name: "Republican operatives",
       description: "Strategists, pollsters, campaign and party staff, including ones now working in media.",
       file: "lists/republican-operatives.txt",
+      requireNotes: true, // every entry says who the person is (enforced by the unit tests)
       style: { fill: "#ff3b3026", border: "#ff3b30ff", borderWidth: 1 },
     },
     {
@@ -213,6 +214,7 @@
       name: "Democratic operatives",
       description: "Strategists, pollsters, campaign and party staff, including ones now working in media.",
       file: "lists/democratic-operatives.txt",
+      requireNotes: true,
       style: { fill: "#0a84ff26", border: "#0a84ffff", borderWidth: 1 },
     },
     {
@@ -223,6 +225,46 @@
       style: { fill: "#ff8c00ff", border: "#ff8c00ff", borderWidth: 0 },
     },
   ].map((s) => ({ ...s, url: LISTS_BASE + s.file.split("/").pop() }));
+
+  // --- Sending additions back to the repo ----------------------------------------
+  // "Send to GitHub" opens a pre-filled new issue holding the names. When the
+  // repository's owner submits it, a workflow adds them to the list file
+  // (.github/workflows/apply-list-additions.yml); from anyone else it's an
+  // ordinary suggestion. The body's format is parsed by
+  // scripts/apply-list-additions.mjs, so change them together.
+
+  const REPO_URL = "https://github.com/jstock29/take-radar";
+  const ADDITIONS_MARKER = "take-radar:additions";
+  // Stay well under GitHub's limit on the length of an address.
+  const MAX_ISSUE_URL = 7000;
+
+  /** The starter list a synced list comes from, if it comes from this repo. */
+  const starterOf = (list) => STARTERS.find((s) => s.url === list.source?.url);
+
+  /** Names among `entries` that have no note. */
+  const withoutNote = (entries) =>
+    entries.map(splitEntry).filter((e) => !e.note).map((e) => e.name);
+
+  /**
+   * The address of a new issue asking for `entries` to be added to a starter
+   * list's file, or "" if there are too many to fit in an address.
+   */
+  const additionsIssueUrl = (starter, entries) => {
+    // Backticks would end the code block the names sit in.
+    const lines = entries.map((e) => e.replace(/`/g, "'").replace(/\s+/g, " ").trim()).filter(Boolean);
+    const body = [
+      `<!-- ${ADDITIONS_MARKER} -->`,
+      `Names to add to \`${starter.file}\`, sent from the Take Radar extension.`,
+      "",
+      "```",
+      ...lines,
+      "```",
+      "",
+    ].join("\n");
+    const title = `Add ${lines.length} name${lines.length === 1 ? "" : "s"} to ${starter.file.split("/").pop()}`;
+    const url = `${REPO_URL}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+    return url.length > MAX_ISSUE_URL ? "" : url;
+  };
 
   // --- Lists ------------------------------------------------------------------
 
@@ -370,9 +412,14 @@
     splitEntry,
     parseListText,
     listEntries,
+    nameKey,
     cleanSelection,
     addSelection,
     pruneAdded,
+    starterOf,
+    withoutNote,
+    additionsIssueUrl,
+    ADDITIONS_MARKER,
     fetchList,
     normalizeList,
     normalizeSettings,

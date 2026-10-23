@@ -16,6 +16,9 @@ const {
   cleanSelection,
   addSelection,
   pruneAdded,
+  starterOf,
+  withoutNote,
+  additionsIssueUrl,
   createMatcher,
   STARTERS,
 } = globalThis.TakeRadar;
@@ -172,6 +175,36 @@ test("a refresh drops additions the source now lists, and keeps the rest", () =>
   assert.deepEqual(pruneAdded(undefined, source), []);
 });
 
+test("the operative lists require notes; the Harper's list doesn't", () => {
+  assert.deepEqual(
+    STARTERS.filter((s) => s.requireNotes).map((s) => s.id),
+    ["republican-operatives", "democratic-operatives"],
+  );
+});
+
+test("a synced list is matched to its starter by source URL, and notes are checked", () => {
+  const gop = STARTERS[0];
+  assert.equal(starterOf({ source: { url: gop.url } }), gop);
+  assert.equal(starterOf({ source: { url: "https://example.com/other.txt" } }), undefined);
+  assert.equal(starterOf({}), undefined);
+  assert.deepEqual(withoutNote(["Jane Doe | pollster", "John Roe", "Ann Lee |  "]), ["John Roe", "Ann Lee"]);
+});
+
+test("the issue address holds the file and names, and gives up when there are too many", () => {
+  const gop = STARTERS[0];
+  const url = new URL(additionsIssueUrl(gop, ["Jane Doe | pollster", "John `Roe` | a   b"]));
+  assert.equal(url.origin + url.pathname, "https://github.com/jstock29/take-radar/issues/new");
+  assert.equal(url.searchParams.get("title"), "Add 2 names to republican-operatives.txt");
+  const body = url.searchParams.get("body");
+  assert.match(body, /^<!-- take-radar:additions -->\n/);
+  assert.match(body, /`lists\/republican-operatives\.txt`/);
+  assert.match(body, /```\nJane Doe \| pollster\nJohn 'Roe' \| a b\n```/, "backticks and runs of spaces are cleaned");
+  assert.equal(new URL(additionsIssueUrl(gop, ["Solo"])).searchParams.get("title"), "Add 1 name to republican-operatives.txt");
+
+  const many = Array.from({ length: 200 }, (_, i) => `Person Number${i} | a fairly long note about who this person is`);
+  assert.equal(additionsIssueUrl(gop, many), "");
+});
+
 test("normalizeList keeps `added` only beside a source", () => {
   const synced = normalizeList({ names: ["A"], added: ["B", 3], source: { url: "https://x.test/a.txt" } });
   assert.deepEqual(synced.added, ["B"]);
@@ -196,7 +229,7 @@ for (const starter of STARTERS) {
     const dupes = names.filter((n, i) => names.indexOf(n) !== i);
     assert.deepEqual(dupes, [], "duplicate names");
 
-    if (starter.id.endsWith("operatives")) {
+    if (starter.requireNotes) {
       const missing = entries.filter((e) => !splitEntry(e).note);
       assert.deepEqual(missing, [], "every operative needs a note saying who they are");
     }

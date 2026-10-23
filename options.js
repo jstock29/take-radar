@@ -7,6 +7,9 @@ const {
   parseColor,
   parseListText,
   listEntries,
+  starterOf,
+  withoutNote,
+  additionsIssueUrl,
   fetchList,
   toHex8,
   toCss,
@@ -331,6 +334,7 @@ function renderList(list, { open = false } = {}) {
     if (lines.length) list.added = lines;
     else delete list.added;
     updateCount();
+    renderAddedActions();
     scheduleSave();
   });
 
@@ -344,11 +348,43 @@ function renderList(list, { open = false } = {}) {
       addedArea.select(); // no clipboard access here; leave it selected to copy by hand
     }
   });
+
+  // Starter lists come from this project's repo: their additions can be sent
+  // there as a pre-filled GitHub issue, which the owner's account applies
+  // automatically (anyone else's is just a suggestion).
+  const addedError = el("div", { className: "sync-error", hidden: true });
+  const sendAdded = el("button", { type: "button", className: "link-btn", textContent: "Send to GitHub" });
+  sendAdded.title = "Open a pre-filled GitHub issue suggesting these names";
+  sendAdded.addEventListener("click", () => {
+    const starter = starterOf(list);
+    const entries = list.added ?? [];
+    const problem = (() => {
+      if (!starter || !entries.length) return "";
+      const bare = starter.requireNotes ? withoutNote(entries) : [];
+      if (bare.length) {
+        return `Each name on this list needs a note saying who they are. Add one after a | for: ${bare.join(", ")}`;
+      }
+      return additionsIssueUrl(starter, entries) ? "" : "That's too many to send at once. Send fewer, or Copy them instead.";
+    })();
+    addedError.textContent = problem;
+    addedError.hidden = !problem;
+    if (problem) return;
+    ext.tabs.create({ url: additionsIssueUrl(starter, entries) });
+  });
+
+  const renderAddedActions = () => {
+    const any = Boolean(list.added?.length);
+    copyAdded.hidden = !any;
+    sendAdded.hidden = !any || !starterOf(list);
+    if (!any) addedError.hidden = true;
+  };
+
   const addedBlock = el(
     "div",
     { className: "added-block" },
-    el("div", { className: "section-label added-label" }, "Your additions", copyAdded),
+    el("div", { className: "section-label added-label" }, "Your additions", el("span", { className: "added-actions" }, copyAdded, sendAdded)),
     addedArea,
+    addedError,
   );
 
   // Lists synced from a URL are read-only here; the source is the truth.
@@ -357,6 +393,7 @@ function renderList(list, { open = false } = {}) {
     textarea.readOnly = Boolean(list.source);
     textarea.classList.toggle("readonly", Boolean(list.source));
     addedBlock.hidden = !list.source;
+    renderAddedActions();
     if (!list.source) {
       syncInfo.replaceChildren();
       syncInfo.hidden = true;

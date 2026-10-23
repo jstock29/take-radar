@@ -46,6 +46,7 @@ notes.
 | `options.html/.css/.js` | The settings panel, used both as the toolbar popup and as a full-page options tab |
 | `color-picker.js` | The in-panel color picker (see below) |
 | `lists/` | The starter lists, bundled and synced from GitHub |
+| `scripts/` | Packaging and store-publishing scripts, and `apply-list-additions.mjs` (adds names from a "Send to GitHub" issue to a list file) |
 | `tests/` | Unit tests (`npm test`) and end-to-end tests in Chromium (`npm run test:e2e`) |
 
 ## List format
@@ -64,7 +65,25 @@ A `.csv` with a header row uses the `name` column, plus a `note`, `notes`,
 header treats every cell as a name.
 
 To fix or add someone on a starter list, edit the file in `lists/` and
-merge to `main`; installed copies pick it up within 12 hours. Names you added
+merge to `main`; installed copies pick it up within 12 hours.
+
+### Sending additions from the extension
+
+For a starter list, **Your additions** also has **Send to GitHub**. It opens a
+new issue on this repo with the names filled in (each operative needs a note,
+so it asks for one first). When the repository owner submits that issue,
+`.github/workflows/apply-list-additions.yml` runs
+`scripts/apply-list-additions.mjs`, which adds the names under an "Added from
+the extension" heading at the end of the list file, runs the unit tests (they
+enforce the list rules), commits to `main` and closes the issue. If the tests
+fail it comments with why and commits nothing; edit the issue to fix the
+names and it tries again. The extension drops the names from *Your additions*
+the next time it refreshes the list.
+
+Issues from anyone else are never applied; they stay ordinary suggestions for
+the owner to review. The workflow's commit uses the built-in token, which
+doesn't start other workflows, so a list-only change doesn't trigger a store
+release. Names you added
 in the extension under **Your additions** drop out of the extension on their
 own once the refreshed file contains them.
 

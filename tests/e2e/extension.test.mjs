@@ -545,3 +545,65 @@ test("an open panel picks up a name added from the page instead of overwriting i
   assert.equal(lists[1].enabled, false, "the panel's own change still saved");
   await panel.close();
 });
+
+// --- Sending additions to GitHub -----------------------------------------------------------
+
+const GOP_SOURCE = "https://raw.githubusercontent.com/jstock29/take-radar/main/lists/republican-operatives.txt";
+const gopList = (added) => ({
+  ...PEOPLE,
+  id: "gop",
+  name: "Republican operatives",
+  names: ["Alex Conant | Republican strategist"],
+  source: { url: GOP_SOURCE, updatedAt: 1, error: "" },
+  added,
+});
+
+// Click "Send to GitHub" and return the address it tries to open. Tab
+// addresses aren't visible to an extension without the "tabs" permission, so
+// the panel's tabs.create is replaced to capture it (and to keep the test off
+// the network).
+const sendToGitHub = async (panel) => {
+  await panel.evaluate(() => {
+    window.__opened = [];
+    chrome.tabs.create = async ({ url }) => void window.__opened.push(url);
+  });
+  await panel.getByRole("button", { name: "Send to GitHub" }).click();
+  await panel.waitForFunction(() => window.__opened.length > 0);
+  const opened = await panel.evaluate(() => window.__opened);
+  assert.equal(opened.length, 1, "opens exactly one tab");
+  return new URL(opened[0]);
+};
+
+test("Send to GitHub opens a pre-filled issue, but only once every operative has a note", async () => {
+  await reset({ lists: [gopList(["Jane Doe"])] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+
+  // No note: refused, with the names that need one.
+  await panel.getByRole("button", { name: "Send to GitHub" }).click();
+  assert.match(await panel.textContent(".added-block .sync-error"), /needs a note.*: Jane Doe$/);
+
+  await panel.getByLabel("Your additions").fill("Jane Doe | pollster\nJohn Roe | strategist");
+  const url = await sendToGitHub(panel);
+  assert.equal(url.origin + url.pathname, "https://github.com/jstock29/take-radar/issues/new");
+  assert.equal(url.searchParams.get("title"), "Add 2 names to republican-operatives.txt");
+  assert.match(url.searchParams.get("body"), /```\nJane Doe \| pollster\nJohn Roe \| strategist\n```/);
+  assert.equal(await panel.locator(".added-block .sync-error").isVisible(), false, "the refusal clears once it works");
+  await panel.close();
+});
+
+test("Send to GitHub is only offered for lists from this repo, and only with additions", async () => {
+  const other = syncedList({ added: ["Jane Doe"] });
+  await reset({ lists: [other, gopList(undefined)] });
+  const panel = await openPanel();
+  const [a, b] = [panel.locator(".list").nth(0), panel.locator(".list").nth(1)];
+  await a.locator(".toggle").click();
+  assert.equal(await a.getByRole("button", { name: "Copy" }).isVisible(), true);
+  assert.equal(await a.getByRole("button", { name: "Send to GitHub" }).isVisible(), false, "a URL list from elsewhere");
+  await b.locator(".toggle").click();
+  assert.equal(await b.getByRole("button", { name: "Send to GitHub" }).isVisible(), false, "nothing to send yet");
+
+  await b.getByLabel("Your additions").fill("Jane Doe | pollster");
+  assert.equal(await b.getByRole("button", { name: "Send to GitHub" }).isVisible(), true);
+  await panel.close();
+});

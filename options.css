@@ -615,6 +615,14 @@ textarea.readonly {
   text-transform: none;
   letter-spacing: normal;
 }
+.added-actions {
+  display: flex;
+  gap: 4px;
+}
+.added-block .sync-error {
+  margin-top: 6px;
+  font-size: 12px;
+}
 textarea.added {
   height: 72px;
 }
