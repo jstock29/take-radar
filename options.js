@@ -102,6 +102,97 @@ const PRESETS = [
 // Only one color picker is open at a time across all lists.
 let closeOpenPicker = null;
 
+// --- Your additions -------------------------------------------------------------
+
+// Set a textarea from a list of lines, unless it already says that (assigning
+// moves the caret).
+const setText = (field, lines) => {
+  const text = lines.join("\n");
+  if (field.value !== text) field.value = text;
+};
+
+// The "Your additions" box under a synced list's names. They're kept apart
+// from the synced names so a refresh doesn't replace them. "Copy" gives them
+// in list-file form; in developer mode, "Submit new names" sends the ones for
+// a starter list to this project's repo as a pre-filled GitHub issue, which
+// the owner's account applies automatically (anyone else's is a suggestion).
+// `refresh()` brings the box up to date with the list after it changed.
+function additionsBlock(list, { onEdit }) {
+  const area = el("textarea", {
+    className: "added",
+    placeholder: "Names you add here stay when this list refreshes. One per line, with an optional note after a |.",
+    spellcheck: false,
+    ariaLabel: "Your additions",
+  });
+  area.addEventListener("input", () => {
+    const lines = area.value
+      .split("\n")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (lines.length) list.added = lines;
+    else delete list.added;
+    actions();
+    onEdit();
+    scheduleSave();
+  });
+
+  const copy = el("button", { type: "button", className: "link-btn", textContent: "Copy" });
+  copy.title = "Copy your additions in list-file format";
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText((list.added ?? []).join("\n") + "\n");
+      showStatus("Copied", { fade: true });
+    } catch {
+      area.select(); // no clipboard access here; leave it selected to copy by hand
+    }
+  });
+
+  const error = el("div", { className: "sync-error", hidden: true });
+  const submit = el("button", { type: "button", className: "link-btn" });
+  submit.title = "Opens a pre-filled issue on this project's GitHub page with these names";
+  submit.addEventListener("click", () => {
+    const starter = starterOf(list);
+    const entries = list.added ?? [];
+    const problem = (() => {
+      if (!starter || !entries.length) return "";
+      const bare = starter.requireNotes ? withoutNote(entries) : [];
+      if (bare.length) {
+        return `Each name on this list needs a note saying who they are. Add one after a | for: ${bare.join(", ")}`;
+      }
+      return additionsIssueUrl(starter, entries) ? "" : "That's too many to send at once. Send fewer, or Copy them instead.";
+    })();
+    error.textContent = problem;
+    error.hidden = !problem;
+    if (problem) return;
+    ext.tabs.create({ url: additionsIssueUrl(starter, entries) });
+  });
+
+  const actions = () => {
+    const any = Boolean(list.added?.length);
+    copy.hidden = !any;
+    submit.hidden = !settings.developerMode || !any || !starterOf(list);
+    submit.textContent = list.added?.length === 1 ? "Submit new name" : "Submit new names";
+    if (!any) error.hidden = true;
+  };
+
+  const block = el(
+    "div",
+    { className: "added-block" },
+    el("div", { className: "section-label added-label" }, "Your additions", el("span", { className: "added-actions" }, copy, submit)),
+    area,
+    error,
+  );
+
+  return {
+    el: block,
+    refresh() {
+      block.hidden = !list.source;
+      setText(area, list.added ?? []);
+      actions();
+    },
+  };
+}
+
 // --- One list card -----------------------------------------------------------
 
 function renderList(list, { open = false } = {}) {
@@ -316,85 +407,15 @@ function renderList(list, { open = false } = {}) {
     scheduleSave();
   });
 
-  // Names you add to a synced list. They're kept apart from the synced names
-  // so a refresh doesn't replace them; "Copy" gives them in list-file form,
-  // ready to paste into the source.
-  const addedArea = el("textarea", {
-    className: "added",
-    placeholder: "Names you add here stay when this list refreshes. One per line, with an optional note after a |.",
-    value: (list.added ?? []).join("\n"),
-    spellcheck: false,
-    ariaLabel: "Your additions",
-  });
-  addedArea.addEventListener("input", () => {
-    const lines = addedArea.value
-      .split("\n")
-      .map((n) => n.trim())
-      .filter(Boolean);
-    if (lines.length) list.added = lines;
-    else delete list.added;
-    updateCount();
-    renderAddedActions();
-    scheduleSave();
-  });
-
-  const copyAdded = el("button", { type: "button", className: "link-btn", textContent: "Copy" });
-  copyAdded.title = "Copy your additions in list-file format";
-  copyAdded.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText((list.added ?? []).join("\n") + "\n");
-      showStatus("Copied", { fade: true });
-    } catch {
-      addedArea.select(); // no clipboard access here; leave it selected to copy by hand
-    }
-  });
-
-  // Starter lists come from this project's repo: in developer mode their
-  // additions can be submitted there as a pre-filled GitHub issue, which the
-  // owner's account applies automatically (anyone else's is just a suggestion).
-  const addedError = el("div", { className: "sync-error", hidden: true });
-  const sendAdded = el("button", { type: "button", className: "link-btn" });
-  sendAdded.title = "Opens a pre-filled issue on this project's GitHub page with these names";
-  sendAdded.addEventListener("click", () => {
-    const starter = starterOf(list);
-    const entries = list.added ?? [];
-    const problem = (() => {
-      if (!starter || !entries.length) return "";
-      const bare = starter.requireNotes ? withoutNote(entries) : [];
-      if (bare.length) {
-        return `Each name on this list needs a note saying who they are. Add one after a | for: ${bare.join(", ")}`;
-      }
-      return additionsIssueUrl(starter, entries) ? "" : "That's too many to send at once. Send fewer, or Copy them instead.";
-    })();
-    addedError.textContent = problem;
-    addedError.hidden = !problem;
-    if (problem) return;
-    ext.tabs.create({ url: additionsIssueUrl(starter, entries) });
-  });
-
-  const renderAddedActions = () => {
-    const any = Boolean(list.added?.length);
-    copyAdded.hidden = !any;
-    sendAdded.hidden = !settings.developerMode || !any || !starterOf(list);
-    sendAdded.textContent = list.added?.length === 1 ? "Submit new name" : "Submit new names";
-    if (!any) addedError.hidden = true;
-  };
-
-  const addedBlock = el(
-    "div",
-    { className: "added-block" },
-    el("div", { className: "section-label added-label" }, "Your additions", el("span", { className: "added-actions" }, copyAdded, sendAdded)),
-    addedArea,
-    addedError,
-  );
+  // Names you add to a synced list live in their own box beside the synced ones.
+  const additions = additionsBlock(list, { onEdit: updateCount });
 
   // Lists synced from a URL are read-only here; the source is the truth.
   const syncInfo = el("div", { className: "sync-info" });
   const renderSync = () => {
     textarea.readOnly = Boolean(list.source);
     textarea.classList.toggle("readonly", Boolean(list.source));
-    addedBlock.hidden = !list.source;
-    renderAddedActions();
+    additions.refresh();
     if (!list.source) {
       syncInfo.replaceChildren();
       syncInfo.hidden = true;
@@ -419,7 +440,6 @@ function renderList(list, { open = false } = {}) {
         list.names = [...list.names, ...list.added];
         delete list.added;
         textarea.value = list.names.join("\n");
-        addedArea.value = "";
       }
       renderSync();
       scheduleSave();
@@ -434,8 +454,7 @@ function renderList(list, { open = false } = {}) {
 
   // Called when the background script refreshes this list's names.
   cardUpdaters.set(list.id, () => {
-    if (document.activeElement !== textarea) textarea.value = list.names.join("\n");
-    if (document.activeElement !== addedArea) addedArea.value = (list.added ?? []).join("\n");
+    setText(textarea, list.names);
     updateCount();
     renderSync();
   });
@@ -488,7 +507,7 @@ function renderList(list, { open = false } = {}) {
     el("div", { className: "section-label", textContent: "Names" }),
     syncInfo,
     textarea,
-    addedBlock,
+    additions.el,
   );
 
   card.append(header, body);
@@ -524,10 +543,12 @@ function renderEmptyState() {
     listsEl.querySelector(".empty")?.remove();
   } else if (!listsEl.querySelector(".empty")) {
     listsEl.append(
-      el("div", {
-        className: "empty",
-        textContent: "No lists yet. Add a starter list below, or make your own.",
-      }),
+      el(
+        "div",
+        { className: "empty" },
+        el("strong", { textContent: "Nothing highlighted yet" }),
+        "Add a starter list below, or make your own, and its names will be highlighted on every page you visit.",
+      ),
     );
   }
 }
@@ -775,6 +796,16 @@ developerBox.addEventListener("change", () => {
   renderDeveloper();
 });
 
+// --- About ------------------------------------------------------------------------------
+
+document.getElementById("version").textContent = `Take Radar v${ext.runtime.getManifest().version}`;
+
+function renderAbout() {
+  document.getElementById("shortcut").textContent = shortcut
+    ? `${shortcut} pauses and resumes highlighting everywhere.`
+    : "No keyboard shortcut is set. You can assign one in your browser\u2019s extension shortcut settings.";
+}
+
 // --- On this page -----------------------------------------------------------------------
 
 const onPageEl = document.getElementById("onPage");
@@ -858,9 +889,11 @@ ext.storage.onChanged.addListener((changes, area) => {
   if (changes.lists) {
     // Names change behind this page's back when a synced list refreshes or a
     // name is added from the right-click menu; take those in so the next
-    // save here doesn't overwrite them.
+    // save here doesn't overwrite them. Not while someone is typing in a box
+    // here (or a save of what they typed is pending): their text wins.
+    const typing = saveTimer || (document.hasFocus() && document.activeElement?.tagName === "TEXTAREA");
     const contents = (l) => JSON.stringify([l.names, l.added, l.source]);
-    for (const stored of (changes.lists.newValue ?? []).map(normalizeList)) {
+    for (const stored of typing ? [] : (changes.lists.newValue ?? []).map(normalizeList)) {
       const mine = lists.find((l) => l.id === stored.id);
       if (!mine || contents(mine) === contents(stored)) continue;
       mine.names = stored.names;
@@ -893,6 +926,7 @@ ext.storage.onChanged.addListener((changes, area) => {
   renderEmptyState();
   renderStarters();
   renderPower();
+  renderAbout();
   renderDeveloper();
   renderOnPage();
 })();

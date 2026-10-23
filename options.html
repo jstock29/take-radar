@@ -3,11 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Take Radar</title>
+    <title>Take Radar settings</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <header>
+      <img class="logo" src="icons/icon-48.png" alt="" width="20" height="20" />
       <h1>Take Radar</h1>
       <span id="status" role="status"></span>
       <button id="powerBtn" class="switch" type="button" role="switch" aria-checked="true">
@@ -25,6 +26,40 @@
       <section id="onPage" class="on-page" hidden></section>
       <div id="lists"></div>
       <section id="starters" class="starters" hidden></section>
+      <details id="about" class="about">
+        <summary>
+          <span id="version" class="version"></span>
+          <span class="about-toggle">
+            About
+            <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </summary>
+        <div class="about-body">
+          <p>Take Radar highlights the people you&rsquo;re keeping an eye on, on every page you visit. Hover a highlight to see which lists someone is on.</p>
+          <dl>
+            <dt>Add a name</dt>
+            <dd>Select it on any page, right-click, and choose &ldquo;Add to Take Radar list&rdquo;.</dd>
+            <dt>Pause</dt>
+            <dd id="shortcut"></dd>
+            <dt>Privacy</dt>
+            <dd>Your lists and settings stay in this browser, and page text is only read on your device to find names. The only network requests are the list addresses you subscribe to; the starter lists come from this project&rsquo;s GitHub page.</dd>
+          </dl>
+          <p class="about-links">
+            <a href="https://github.com/jstock29/take-radar" target="_blank" rel="noreferrer">Source on GitHub</a>
+            &middot;
+            <a href="https://github.com/jstock29/take-radar/issues" target="_blank" rel="noreferrer">Report a problem or suggest a name</a>
+          </p>
+          <div id="developer" class="developer" hidden>
+            <label class="check">
+              <input id="developerMode" type="checkbox" />
+              <span>
+                <span>Developer mode</span>
+                <span class="check-hint">For maintaining the starter lists. Adds a button under a starter list&rsquo;s &ldquo;Your additions&rdquo; that submits the names to this project&rsquo;s GitHub page.</span>
+              </span>
+            </label>
+          </div>
+        </div>
+      </details>
     </main>
     <form id="urlForm" class="url-form" hidden>
       <label for="urlInput">Add a list from a web address</label>
@@ -42,16 +77,8 @@
       <button id="urlBtn" type="button">From URL</button>
       <input type="file" id="importFile" accept=".csv,.txt,text/plain,text/csv" hidden />
     </footer>
-    <div id="developer" class="developer" hidden>
-      <label class="check">
-        <input id="developerMode" type="checkbox" />
-        <span>
-          <span>Developer mode</span>
-          <span class="check-hint">For maintaining the starter lists. Adds a button under a starter list&rsquo;s &ldquo;Your additions&rdquo; that submits the names to this project&rsquo;s GitHub page.</span>
-        </span>
-      </label>
-    </div>
     <script src="shared.js"></script>
+    <script src="additions.js"></script>
     <script type="module" src="options.js"></script>
   </body>
 </html>

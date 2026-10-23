@@ -40,10 +40,11 @@ notes.
 | --- | --- |
 | `manifest.json` | MV3 manifest that works in Chrome, Safari and Firefox |
 | `shared.js` | List and settings shapes, list-file parsing, colors and the highlight style; shared by every context |
+| `additions.js` | Names added by hand, and sending them to the starter lists; used by the background script and settings page, not loaded into web pages |
 | `matcher.js` | Finds names in text (accents, initials, middle initials); no DOM, so it's unit-tested |
 | `content.js` | Walks the page and its shadow roots, wraps matches in highlights, reports the count |
 | `background.js` | Install/upgrade, the toolbar badge, scheduled list refreshes, the pause shortcut |
-| `options.html/.css/.js` | The settings panel, used both as the toolbar popup and as a full-page options tab |
+| `options.html/.css/.js` | The settings panel, used both as the toolbar popup and as a full-page options tab, with the version and an About section at the bottom |
 | `color-picker.js` | The in-panel color picker (see below) |
 | `lists/` | The starter lists, bundled and synced from GitHub |
 | `scripts/` | Packaging and store-publishing scripts, and `apply-list-additions.mjs` (adds names from a "Submit new names" issue to a list file) |
@@ -70,8 +71,8 @@ merge to `main`; installed copies pick it up within 12 hours.
 ### Submitting additions to the starter lists (developer mode)
 
 This is for whoever maintains the starter lists, so it's hidden by default.
-Turn on **Developer mode** at the bottom of the full-page options tab (the
-open-in-tab button in the popup's header). A starter list's **Your
+Turn on **Developer mode** in the options page's **About** section (open the
+full-page tab with the button in the popup's header). A starter list's **Your
 additions** then gets a **Submit new names** button. It opens a new issue on
 this repo with the names filled in (each operative needs a note, so it asks
 for one first). When the repository owner submits that issue,

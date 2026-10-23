@@ -617,6 +617,7 @@ test("Developer mode is off by default, hides the button, and is switched on in 
   // The popup-sized view has no switch, and no button.
   let panel = await openPanel();
   await panel.click(".list .toggle");
+  await panel.click("#about summary");
   assert.equal(await panel.locator("#developer").isVisible(), false);
   assert.equal(await panel.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
   assert.equal(await panel.getByRole("button", { name: "Copy" }).isVisible(), true, "copying isn't affected");
@@ -627,6 +628,7 @@ test("Developer mode is off by default, hides the button, and is switched on in 
   await panel.setViewportSize({ width: 900, height: 700 });
   await panel.goto(`chrome-extension://${extensionId}/options.html`);
   await panel.click(".list .toggle");
+  await panel.click("#about summary");
   assert.equal(await panel.getByLabel("Developer mode").isChecked(), false);
   assert.equal(await panel.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
   await panel.getByLabel("Developer mode").check();
@@ -639,6 +641,7 @@ test("Developer mode is off by default, hides the button, and is switched on in 
   // Once on, the popup-sized view shows the button and keeps the switch so it can be turned off.
   const small = await openPanel();
   await small.click(".list .toggle");
+  await small.click("#about summary");
   assert.equal(await small.getByRole("button", { name: "Submit new name" }).isVisible(), true);
   await small.getByLabel("Developer mode").uncheck();
   assert.equal(await small.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
@@ -647,5 +650,52 @@ test("Developer mode is off by default, hides the button, and is switched on in 
   // ...and the other open view follows.
   await panel.waitForFunction(() => !document.querySelector("#developerMode").checked);
   await small.close();
+  await panel.close();
+});
+
+test("a name added from the page reaches an options tab left in the background, even with its box focused", async () => {
+  await reset({ lists: [syncedList()] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+  const box = panel.getByRole("textbox", { name: "Your additions" });
+  await box.focus();
+
+  // Another tab comes to the front; the panel keeps its focused box but loses focus itself.
+  const page = await openPage("/article.html");
+  await pickFromMenu("synced", "Lee Tester");
+  await panel.waitForFunction(() => document.querySelector("textarea.added").value === "Lee Tester");
+
+  // Typing on afterwards adds to it rather than replacing it.
+  await panel.bringToFront();
+  await box.press("Control+End");
+  await box.pressSequentially("\nPat Added | note");
+  await panel.waitForTimeout(400);
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].added, ["Lee Tester", "Pat Added | note"]);
+  await page.close();
+  await panel.close();
+});
+
+// --- About ---------------------------------------------------------------------------------
+
+test("the options page shows its version and an About panel, collapsed until asked for", async () => {
+  await reset({ lists: [] });
+  const panel = await openPanel();
+  const { version } = JSON.parse(fs.readFileSync(path.join(REPO, "manifest.json"), "utf8"));
+
+  // A quiet version line is always there; the details aren't until opened.
+  assert.equal(await panel.textContent("#version"), `Take Radar v${version}`);
+  assert.equal(await panel.locator(".about-body").isVisible(), false);
+  assert.match(await panel.textContent(".empty"), /Nothing highlighted yet/);
+
+  await panel.click("#about summary");
+  assert.equal(await panel.locator(".about-body").isVisible(), true);
+  assert.match(await panel.textContent("#shortcut"), /Alt\+Shift\+R pauses and resumes|No keyboard shortcut/);
+  assert.match(await panel.textContent(".about-body"), /stay in this browser/);
+  const links = await panel.locator(".about-links a").evaluateAll((as) => as.map((a) => [a.href, a.target, a.rel]));
+  assert.deepEqual(links, [
+    ["https://github.com/jstock29/take-radar", "_blank", "noreferrer"],
+    ["https://github.com/jstock29/take-radar/issues", "_blank", "noreferrer"],
+  ]);
   await panel.close();
 });

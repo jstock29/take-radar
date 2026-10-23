@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 require("../../shared.js");
+require("../../additions.js");
 const { STARTERS, additionsIssueUrl, parseListText, splitEntry } = globalThis.TakeRadar;
 const script = import("../../scripts/apply-list-additions.mjs");
 
@@ -136,4 +137,15 @@ test("a committed list file stays well formed after additions", async () => {
   const entries = parseListText(text);
   assert.equal(entries.length, parseListText(real).length + 1);
   assert.equal(splitEntry(entries.at(-1)).name, "Zzyzx Fixture");
+});
+
+test("the additions workflow only acts for the repository owner, and never puts issue text in a shell", () => {
+  const yml = fs.readFileSync(path.join(__dirname, "../../.github/workflows/apply-list-additions.yml"), "utf8");
+  const gate = yml.slice(yml.indexOf("    if: >-"), yml.indexOf("    runs-on:"));
+  assert.match(gate, /github\.event\.issue\.user\.login == github\.repository_owner/, "issue opened by the owner");
+  assert.match(gate, /github\.event\.sender\.login == github\.repository_owner/, "and triggered by the owner");
+  assert.match(gate, /github\.event\.issue\.state == 'open'/);
+  assert.match(yml, /^on:\n  issues:\n    types: \[opened, edited\]\n\npermissions:/m, "no other triggers");
+  assert.match(yml, /^permissions:\n  contents: write\n  issues: write\n/m, "no broader permissions");
+  assert.doesNotMatch(yml, /\$\{\{\s*github\.event\.issue\.(body|title)/, "the body is read from the event file");
 });

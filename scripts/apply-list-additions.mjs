@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 require("../shared.js");
+require("../additions.js");
 const { splitEntry, nameKey, ADDITIONS_MARKER } = globalThis.TakeRadar;
 
 export const SECTION = "# Added from the extension (move into a section above when convenient)";

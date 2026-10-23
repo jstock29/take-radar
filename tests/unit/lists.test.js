@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 require("../../shared.js");
+require("../../additions.js");
 require("../../matcher.js");
 const {
   parseListText,
