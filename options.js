@@ -6,6 +6,7 @@ const {
   normalizeSettings,
   parseColor,
   parseListText,
+  listEntries,
   fetchList,
   toHex8,
   toCss,
@@ -132,7 +133,7 @@ function renderList(list, { open = false } = {}) {
 
   const count = el("span", { className: "count" });
   const updateCount = () => {
-    const n = list.names.length;
+    const n = listEntries(list).length;
     count.textContent = list.enabled === false ? "Hidden" : `${n} name${n === 1 ? "" : "s"}`;
     card.classList.toggle("disabled", list.enabled === false);
   };
@@ -312,11 +313,50 @@ function renderList(list, { open = false } = {}) {
     scheduleSave();
   });
 
+  // Names you add to a synced list. They're kept apart from the synced names
+  // so a refresh doesn't replace them; "Copy" gives them in list-file form,
+  // ready to paste into the source.
+  const addedArea = el("textarea", {
+    className: "added",
+    placeholder: "Names you add here stay when this list refreshes. One per line, with an optional note after a |.",
+    value: (list.added ?? []).join("\n"),
+    spellcheck: false,
+    ariaLabel: "Your additions",
+  });
+  addedArea.addEventListener("input", () => {
+    const lines = addedArea.value
+      .split("\n")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (lines.length) list.added = lines;
+    else delete list.added;
+    updateCount();
+    scheduleSave();
+  });
+
+  const copyAdded = el("button", { type: "button", className: "link-btn", textContent: "Copy" });
+  copyAdded.title = "Copy your additions in list-file format";
+  copyAdded.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText((list.added ?? []).join("\n") + "\n");
+      showStatus("Copied", { fade: true });
+    } catch {
+      addedArea.select(); // no clipboard access here; leave it selected to copy by hand
+    }
+  });
+  const addedBlock = el(
+    "div",
+    { className: "added-block" },
+    el("div", { className: "section-label added-label" }, "Your additions", copyAdded),
+    addedArea,
+  );
+
   // Lists synced from a URL are read-only here; the source is the truth.
   const syncInfo = el("div", { className: "sync-info" });
   const renderSync = () => {
     textarea.readOnly = Boolean(list.source);
     textarea.classList.toggle("readonly", Boolean(list.source));
+    addedBlock.hidden = !list.source;
     if (!list.source) {
       syncInfo.replaceChildren();
       syncInfo.hidden = true;
@@ -336,6 +376,13 @@ function renderList(list, { open = false } = {}) {
     unlink.title = "Keep these names and edit them here instead";
     unlink.addEventListener("click", () => {
       delete list.source;
+      // Your additions become ordinary names on the list you now own.
+      if (list.added) {
+        list.names = [...list.names, ...list.added];
+        delete list.added;
+        textarea.value = list.names.join("\n");
+        addedArea.value = "";
+      }
       renderSync();
       scheduleSave();
     });
@@ -350,6 +397,7 @@ function renderList(list, { open = false } = {}) {
   // Called when the background script refreshes this list's names.
   cardUpdaters.set(list.id, () => {
     if (document.activeElement !== textarea) textarea.value = list.names.join("\n");
+    if (document.activeElement !== addedArea) addedArea.value = (list.added ?? []).join("\n");
     updateCount();
     renderSync();
   });
@@ -402,6 +450,7 @@ function renderList(list, { open = false } = {}) {
     el("div", { className: "section-label", textContent: "Names" }),
     syncInfo,
     textarea,
+    addedBlock,
   );
 
   card.append(header, body);
@@ -749,14 +798,17 @@ ext.storage.onChanged.addListener((changes, area) => {
     renderPower();
   }
   if (changes.lists) {
+    // Names change behind this page's back when a synced list refreshes or a
+    // name is added from the right-click menu; take those in so the next
+    // save here doesn't overwrite them.
+    const contents = (l) => JSON.stringify([l.names, l.added, l.source]);
     for (const stored of (changes.lists.newValue ?? []).map(normalizeList)) {
       const mine = lists.find((l) => l.id === stored.id);
-      if (!mine?.source || !stored.source) continue;
-      if (JSON.stringify([mine.names, mine.source]) === JSON.stringify([stored.names, stored.source])) {
-        continue;
-      }
+      if (!mine || contents(mine) === contents(stored)) continue;
       mine.names = stored.names;
       mine.source = stored.source;
+      if (stored.added) mine.added = stored.added;
+      else delete mine.added;
       cardUpdaters.get(mine.id)?.();
     }
   }

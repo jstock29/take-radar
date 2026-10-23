@@ -419,3 +419,129 @@ test("the per-list switches in the panel save", async () => {
   assert.equal(await panel.textContent(".list .count"), "Hidden");
   await panel.close();
 });
+
+// --- Names added by hand ---------------------------------------------------------------
+
+const SYNCED = {
+  ...PEOPLE,
+  id: "synced",
+  name: "Synced",
+  names: ["Pat Example | from the URL list"],
+  source: { url: "", updatedAt: 1, error: "" },
+};
+const syncedList = (extra = {}) => ({ ...SYNCED, source: { ...SYNCED.source, url: `${base}/list.txt` }, ...extra });
+
+// What the right-click menu does when you pick a list, for the active tab.
+const pickFromMenu = (listId, selectionText) =>
+  worker.evaluate(
+    async ([id, text]) => {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      await handleMenuClick({ menuItemId: `add-to-list:${id}`, selectionText: text }, tab);
+    },
+    [listId, selectionText],
+  );
+
+const toastText = async (page, expected) => {
+  await page.waitForFunction(
+    (want) => document.querySelector("take-radar-toast")?.shadowRoot.querySelector(".toast")?.textContent === want,
+    expected,
+  );
+};
+
+const refresh = (id) => worker.evaluate((i) => refreshLists([i]), id);
+
+test("a name added from the page goes beside a synced list, and outlasts refreshes", async () => {
+  listBody = "Pat Example | from the URL list\nSam Sample\n";
+  await reset({ lists: [syncedList()] });
+  const page = await openPage("/article.html");
+  await waitForHighlights(page, []);
+
+  await pickFromMenu("synced", "  Jane\n Doe, ");
+  await waitForHighlights(page, ["Jane Doe"]);
+  await toastText(page, "Added “Jane Doe” to Synced");
+  let { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].added, ["Jane Doe"]);
+  assert.deepEqual(lists[0].names, ["Pat Example | from the URL list"], "the synced names are untouched");
+
+  // The same name again, and something that isn't a name.
+  await pickFromMenu("synced", "jane doe");
+  await toastText(page, "“Jane Doe” is already on Synced");
+  await pickFromMenu("synced", "...");
+  await toastText(page, "Select just a person’s name to add it");
+
+  // A refresh replaces the synced names but keeps what you added.
+  listBody = "Pat Example\nSam Sample\nNew Person\n";
+  assert.equal((await refresh("synced"))["synced"], "ok");
+  ({ lists } = await getStorage("lists"));
+  assert.deepEqual(lists[0].names, ["Pat Example", "Sam Sample", "New Person"]);
+  assert.deepEqual(lists[0].added, ["Jane Doe"]);
+  await waitForHighlights(page, ["Jane Doe"]);
+
+  // Once the source lists them itself, the local copy is dropped.
+  listBody = "Pat Example\nJane Doe | now upstream\n";
+  await refresh("synced");
+  ({ lists } = await getStorage("lists"));
+  assert.equal("added" in lists[0], false);
+  assert.deepEqual(lists[0].names, ["Pat Example", "Jane Doe | now upstream"]);
+  await waitForHighlights(page, ["Jane Doe"]);
+  await page.close();
+});
+
+test("a name added from the page goes straight into a list you maintain", async () => {
+  await reset();
+  const page = await openPage("/article.html");
+  await waitForHighlights(page, ["Jane Doe", "John Roe", "Ruth A. Okafor", "John Roe"]);
+  await pickFromMenu("people", "Sam Sample");
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].names, [...PEOPLE.names, "Sam Sample"]);
+  assert.equal("added" in lists[0], false);
+  await page.close();
+});
+
+test("the panel lets you add to a synced list, and Stop syncing keeps your additions", async () => {
+  await reset({ lists: [syncedList({ added: ["Jane Doe"] })] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+  assert.equal(await panel.textContent(".list .count"), "2 names");
+  assert.equal(await panel.getByLabel("Names", { exact: true }).isEditable(), false, "synced names are read-only");
+  const mine = panel.getByLabel("Your additions");
+  assert.equal(await mine.inputValue(), "Jane Doe");
+
+  await mine.fill("Jane Doe\nJohn Roe | by hand");
+  await panel.waitForTimeout(400);
+  let { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].added, ["Jane Doe", "John Roe | by hand"]);
+  assert.equal(await panel.textContent(".list .count"), "3 names");
+
+  await panel.getByRole("button", { name: "Stop syncing" }).click();
+  await panel.waitForTimeout(400);
+  ({ lists } = await getStorage("lists"));
+  assert.equal("source" in lists[0], false);
+  assert.equal("added" in lists[0], false);
+  assert.deepEqual(lists[0].names, ["Pat Example | from the URL list", "Jane Doe", "John Roe | by hand"]);
+  assert.equal(await panel.getByLabel("Your additions").isVisible(), false);
+  await panel.close();
+});
+
+test("an open panel picks up a name added from the page instead of overwriting it", async () => {
+  await reset({ lists: [PEOPLE, syncedList()] });
+  const panel = await openPanel();
+  await panel.waitForSelector(".list");
+
+  const page = await openPage("/article.html");
+  await pickFromMenu("people", "Sam Sample");
+  await pickFromMenu("synced", "Lee Tester");
+  await page.close();
+
+  // The panel shows both, so its next save keeps them.
+  await panel.waitForFunction(() => document.querySelector(".list .count").textContent === "4 names");
+  const second = panel.locator(".list").nth(1);
+  await second.locator(".toggle").click();
+  await second.getByLabel(/Highlight this list/).uncheck();
+  await panel.waitForTimeout(400);
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].names, [...PEOPLE.names, "Sam Sample"]);
+  assert.deepEqual(lists[1].added, ["Lee Tester"]);
+  assert.equal(lists[1].enabled, false, "the panel's own change still saved");
+  await panel.close();
+});

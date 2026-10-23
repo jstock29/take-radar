@@ -127,6 +127,68 @@
 
   const joinEntry = ({ name, note }) => (note ? `${name} | ${note}` : name);
 
+  // --- Names you add yourself ---------------------------------------------------
+  // A list synced from a URL is read-only and replaced on every refresh, so
+  // names added by hand live beside it in `list.added` and survive refreshes.
+  // Lists you maintain yourself just take new names in `names`.
+
+  // Two spellings of a name are the same person for adding and de-duplicating:
+  // case, accents, punctuation and spacing don't count.
+  const nameKey = (name) =>
+    String(name)
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+
+  /** Every entry a list matches on: its names, then the ones you added. */
+  const listEntries = (list) => (list.added?.length ? [...list.names, ...list.added] : list.names);
+
+  const MAX_SELECTION_WORDS = 6;
+
+  /**
+   * Turn text selected on a page into a name to add, or "" if it can't be
+   * one (empty, no letters, a whole sentence, or something containing the
+   * | that separates a note).
+   */
+  const cleanSelection = (text) => {
+    const name = String(text ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^[("'“”‘’[]+|[)"'“”‘’\],.;:!?]+$/g, "")
+      .replace(/['’]s$/i, "") // "Bannon's" -> "Bannon"
+      .trim();
+    if (!/\p{L}/u.test(name) || name.includes("|")) return "";
+    if (name.split(" ").length > MAX_SELECTION_WORDS) return "";
+    return name;
+  };
+
+  /**
+   * Add text selected on a page to a list (mutating it): into `added` for a
+   * synced list, `names` otherwise. Returns { status, name } where status is
+   * "added", "duplicate" (name is how the list already spells it) or
+   * "invalid".
+   */
+  const addSelection = (list, text) => {
+    const name = cleanSelection(text);
+    if (!name) return { status: "invalid", name: "" };
+    const key = nameKey(name);
+    const existing = listEntries(list)
+      .map((entry) => splitEntry(entry).name)
+      .find((n) => nameKey(n) === key);
+    if (existing) return { status: "duplicate", name: existing };
+    if (list.source) (list.added ??= []).push(name);
+    else list.names.push(name);
+    return { status: "added", name };
+  };
+
+  /** The additions that a refreshed source doesn't list yet. */
+  const pruneAdded = (added = [], sourceNames = []) => {
+    const listed = new Set(sourceNames.map((entry) => nameKey(splitEntry(entry).name)));
+    return added.filter((entry) => !listed.has(nameKey(splitEntry(entry).name)));
+  };
+
   /** Fetch and parse a list from a URL (CSV if the path ends in .csv). */
   const fetchList = async (url) => {
     const res = await fetch(url, { cache: "no-cache", credentials: "omit" });
@@ -167,9 +229,9 @@
   /**
    * Bring a stored list up to the current shape. Versions before 0.4 stored
    * a single opaque `color`; that becomes the fill. A list synced from a URL
-   * carries `source: { url, updatedAt, error }`. `enabled: false` hides a
-   * list without deleting it; `followups: false` turns off last-name-only
-   * matches for it.
+   * carries `source: { url, updatedAt, error }` and may have `added`, names
+   * you put on it yourself. `enabled: false` hides a list without deleting
+   * it; `followups: false` turns off last-name-only matches for it.
    */
   const normalizeList = (list = {}) => {
     const fill = parseColor(list.fill) ?? parseColor(list.color);
@@ -193,6 +255,11 @@
         error: typeof list.source.error === "string" ? list.source.error : "",
       };
     }
+    // Additions only exist beside a source; on a list you edit directly
+    // they're just more names.
+    const added = Array.isArray(list.added) ? list.added.filter((n) => typeof n === "string") : [];
+    if (out.source && added.length) out.added = added;
+    else out.names.push(...added);
     return out;
   };
 
@@ -302,6 +369,10 @@
     hsvToRgb,
     splitEntry,
     parseListText,
+    listEntries,
+    cleanSelection,
+    addSelection,
+    pruneAdded,
     fetchList,
     normalizeList,
     normalizeSettings,

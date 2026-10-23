@@ -16,6 +16,12 @@ notes.
 - **On this page**: the popup lists who was found on the current tab; click
   a name to scroll to each mention in turn.
 - **Hide a list** without deleting it.
+- **Add names as you see them**: select a name on any page, right-click, and
+  pick **Add to Take Radar list**. On a list you maintain yourself the name
+  goes straight onto it. On a list that syncs from a URL (the starter lists),
+  it goes under **Your additions**, which a refresh never touches; once the
+  source lists the same name, your copy is dropped. **Copy** on that box gives
+  the additions in list-file format, ready to paste into the source.
 
 - **Starter lists**, all opt-in: Republican operatives, Democratic
   operatives, and the Harper's Letter signatories (see `lists/`).
@@ -58,7 +64,9 @@ A `.csv` with a header row uses the `name` column, plus a `note`, `notes`,
 header treats every cell as a name.
 
 To fix or add someone on a starter list, edit the file in `lists/` and
-merge to `main`; installed copies pick it up within 12 hours.
+merge to `main`; installed copies pick it up within 12 hours. Names you added
+in the extension under **Your additions** drop out of the extension on their
+own once the refreshed file contains them.
 
 ## Why a custom color picker
 

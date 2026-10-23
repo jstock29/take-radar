@@ -21,6 +21,7 @@ FEATURES
 • A name on more than one list is striped in each list's color, and its hover card shows every list
 • Later mentions by last name ("Ms. Lake said") are highlighted too, once the full name has appeared
 • See who's on the current page from the toolbar, and jump to each mention
+• Select a name on any page, right-click, and add it to a list; additions to a subscribed list stay when it refreshes
 • Hide a list without deleting it
 • Fill and border colors with adjustable opacity: a solid marker, a light tint, a box around the name, or a mix
 • One-click presets, plus a full color picker
@@ -47,6 +48,7 @@ Your lists and settings are stored only in your browser. Page text is checked lo
 
 - `storage`: Saves the user's name lists, highlight styles and on/off settings locally in the browser.
 - `alarms`: Re-checks lists the user subscribed to by web address twice a day.
+- `contextMenus`: Adds an "Add to Take Radar list" item to the right-click menu when text is selected, so the user can add a name to one of their lists without opening the popup.
 - `activeTab`: Reads the current tab's address when the user opens the popup, to offer "Turn off for this site".
 - Host permission (`<all_urls>`, via content script): The extension's only function is to find and highlight names on any page the user reads. It has to read page text on every site to do that. The text is processed locally and never leaves the browser.
 - Optional host permissions (`https://*/*`, `http://*/*`): Requested only for the one site, and only if the user adds a list from a web address that doesn't allow cross-origin reads. Used solely to download that list.

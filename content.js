@@ -8,6 +8,7 @@
     combinedHighlightStyle,
     createMatcher,
     createFollowupMatcher,
+    listEntries,
   } = TR;
   if (!ext?.runtime?.id || !document.body) return;
 
@@ -337,6 +338,37 @@
     return { show, hide, isShowing: (span) => span === current };
   })();
 
+  // --- Confirmation after adding a name from the right-click menu ------------------------
+
+  const toast = (() => {
+    let host = null;
+    let timer = null;
+
+    return (text) => {
+      host?.remove();
+      host = document.createElement("take-radar-toast");
+      host.style.cssText =
+        "all: initial; position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; pointer-events: none;";
+      const shadow = host.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = `
+        .toast {
+          font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+          color: #f5f5f7; background: #1d1d1f; border-radius: 8px; padding: 8px 12px;
+          max-width: 320px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+        }
+      `;
+      const box = document.createElement("div");
+      box.className = "toast";
+      box.setAttribute("role", "status");
+      box.textContent = text;
+      shadow.append(style, box);
+      document.documentElement.append(host);
+      clearTimeout(timer);
+      timer = setTimeout(() => host.remove(), 2800);
+    };
+  })();
+
   const highlightFrom = (e) =>
     e.composedPath().find((n) => n.classList?.contains?.(HIGHLIGHT_CLASS)) ?? null;
 
@@ -395,6 +427,7 @@
   // click moves to the next mention.
   const revealed = new Map();
   ext.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === "toast") return void toast(String(msg.text ?? ""));
     if (msg?.type !== "reveal") return;
     const spans = allHighlights().filter((s) => spanInfo.get(s)?.entry.name === msg.name);
     if (!spans.length) return;
@@ -461,7 +494,7 @@
     // highlights instead of re-scanning the page.
     const enabled = lists.filter((l) => l.enabled !== false);
     const key = active
-      ? JSON.stringify(enabled.map((l) => [l.id, l.name, l.names, l.followups !== false]))
+      ? JSON.stringify(enabled.map((l) => [l.id, l.name, listEntries(l), l.followups !== false]))
       : "off";
     if (key === matchKey) {
       allHighlights().forEach(applyStyle);

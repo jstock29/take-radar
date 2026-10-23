@@ -12,6 +12,11 @@ const {
   normalizeSettings,
   highlightStyle,
   combinedHighlightStyle,
+  listEntries,
+  cleanSelection,
+  addSelection,
+  pruneAdded,
+  createMatcher,
   STARTERS,
 } = globalThis.TakeRadar;
 
@@ -106,6 +111,75 @@ test("solid stripes pick a text color for their average", () => {
 test("a single list keeps its normal style", () => {
   const list = { fill: "#ff8c00ff", border: "#ff8c00ff", borderWidth: 0 };
   assert.deepEqual(combinedHighlightStyle([list]), highlightStyle(list));
+});
+
+// --- Names you add yourself ----------------------------------------------------------
+
+test("selected text is tidied into a name, or refused", () => {
+  assert.equal(cleanSelection("  Jane\n  Doe "), "Jane Doe");
+  assert.equal(cleanSelection("\u201cJane Doe,\u201d"), "Jane Doe");
+  assert.equal(cleanSelection("Bannon\u2019s"), "Bannon");
+  assert.equal(cleanSelection("Ruth A. Okafor."), "Ruth A. Okafor");
+  assert.equal(cleanSelection("Zo\u00eb O'Neil"), "Zo\u00eb O'Neil");
+  assert.equal(cleanSelection(""), "");
+  assert.equal(cleanSelection("12345"), "", "needs a letter");
+  assert.equal(cleanSelection("Jane | note"), "", "a | would split off a note");
+  assert.equal(cleanSelection("This is a whole sentence and not a name"), "");
+});
+
+test("adding to a synced list goes in `added`; to your own list, in `names`", () => {
+  const synced = normalizeList({ names: ["Jane Doe | pollster"], source: { url: "https://x.test/a.txt" } });
+  assert.deepEqual(addSelection(synced, "John Roe"), { status: "added", name: "John Roe" });
+  assert.deepEqual(synced.names, ["Jane Doe | pollster"], "the synced names are left alone");
+  assert.deepEqual(synced.added, ["John Roe"]);
+
+  const own = normalizeList({ names: ["Jane Doe"] });
+  addSelection(own, "John Roe");
+  assert.deepEqual(own.names, ["Jane Doe", "John Roe"]);
+  assert.equal("added" in own, false);
+});
+
+test("adding someone already on the list (in any spelling) does nothing", () => {
+  const list = normalizeList({
+    names: ["Zo\u00eb O'Neil | strategist"],
+    added: ["Jane Doe"],
+    source: { url: "https://x.test/a.txt" },
+  });
+  assert.deepEqual(addSelection(list, "zoe o\u2019neil"), { status: "duplicate", name: "Zo\u00eb O'Neil" });
+  assert.deepEqual(addSelection(list, "JANE  DOE"), { status: "duplicate", name: "Jane Doe" });
+  assert.deepEqual(addSelection(list, "not a name !!"), { status: "added", name: "not a name" });
+  assert.deepEqual(addSelection(list, "..."), { status: "invalid", name: "" });
+  assert.deepEqual(list.added, ["Jane Doe", "not a name"]);
+});
+
+test("additions are matched like any other name, with their notes", () => {
+  const list = normalizeList({
+    id: "gop",
+    name: "GOP",
+    names: ["Jane Doe"],
+    added: ["John Roe | added by hand"],
+    source: { url: "https://x.test/a.txt" },
+  });
+  assert.deepEqual(listEntries(list), ["Jane Doe", "John Roe | added by hand"]);
+  const found = createMatcher([list]).find("Then John Roe spoke.");
+  assert.equal(found.length, 1);
+  assert.deepEqual(found[0].entry.lists, [{ listId: "gop", listName: "GOP", note: "added by hand" }]);
+});
+
+test("a refresh drops additions the source now lists, and keeps the rest", () => {
+  const source = ["Jane Doe | pollster", "Zo\u00eb O'Neil"];
+  assert.deepEqual(pruneAdded(["jane doe", "John Roe | by hand", "Zoe O'Neil"], source), ["John Roe | by hand"]);
+  assert.deepEqual(pruneAdded(undefined, source), []);
+});
+
+test("normalizeList keeps `added` only beside a source", () => {
+  const synced = normalizeList({ names: ["A"], added: ["B", 3], source: { url: "https://x.test/a.txt" } });
+  assert.deepEqual(synced.added, ["B"]);
+  assert.equal("added" in normalizeList({ names: ["A"], source: { url: "https://x.test/a.txt" } }), false);
+  // A list that stopped syncing folds its additions into its names.
+  const own = normalizeList({ names: ["A"], added: ["B"] });
+  assert.deepEqual(own.names, ["A", "B"]);
+  assert.equal("added" in own, false);
 });
 
 // --- The bundled starter lists ------------------------------------------------------

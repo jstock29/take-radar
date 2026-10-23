@@ -606,6 +606,18 @@ body.paused #lists {
 textarea.readonly {
   color: var(--muted);
 }
+.added-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.added-label .link-btn {
+  text-transform: none;
+  letter-spacing: normal;
+}
+textarea.added {
+  height: 72px;
+}
 
 /* --- Starter lists ------------------------------------------------------------------ */
 
