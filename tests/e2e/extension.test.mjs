@@ -419,3 +419,330 @@ test("the per-list switches in the panel save", async () => {
   assert.equal(await panel.textContent(".list .count"), "Hidden");
   await panel.close();
 });
+
+// --- Names added by hand ---------------------------------------------------------------
+
+const SYNCED = {
+  ...PEOPLE,
+  id: "synced",
+  name: "Synced",
+  names: ["Pat Example | from the URL list"],
+  source: { url: "", updatedAt: 1, error: "" },
+};
+const syncedList = (extra = {}) => ({ ...SYNCED, source: { ...SYNCED.source, url: `${base}/list.txt` }, ...extra });
+
+// What the right-click menu does when you pick a list, for the active tab.
+const pickFromMenu = (listId, selectionText) =>
+  worker.evaluate(
+    async ([id, text]) => {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      await handleMenuClick({ menuItemId: `add-to-list:${id}`, selectionText: text }, tab);
+    },
+    [listId, selectionText],
+  );
+
+const toastText = async (page, expected) => {
+  await page.waitForFunction(
+    (want) => document.querySelector("take-radar-toast")?.shadowRoot.querySelector(".toast")?.textContent === want,
+    expected,
+  );
+};
+
+const refresh = (id) => worker.evaluate((i) => refreshLists([i]), id);
+
+test("a name added from the page goes beside a synced list, and outlasts refreshes", async () => {
+  listBody = "Pat Example | from the URL list\nSam Sample\n";
+  await reset({ lists: [syncedList()] });
+  const page = await openPage("/article.html");
+  await waitForHighlights(page, []);
+
+  await pickFromMenu("synced", "  Jane\n Doe, ");
+  await waitForHighlights(page, ["Jane Doe"]);
+  await toastText(page, "Added “Jane Doe” to Synced");
+  let { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].added, ["Jane Doe"]);
+  assert.deepEqual(lists[0].names, ["Pat Example | from the URL list"], "the synced names are untouched");
+
+  // The same name again, and something that isn't a name.
+  await pickFromMenu("synced", "jane doe");
+  await toastText(page, "“Jane Doe” is already on Synced");
+  await pickFromMenu("synced", "...");
+  await toastText(page, "Select just a person’s name to add it");
+
+  // A refresh replaces the synced names but keeps what you added.
+  listBody = "Pat Example\nSam Sample\nNew Person\n";
+  assert.equal((await refresh("synced"))["synced"], "ok");
+  ({ lists } = await getStorage("lists"));
+  assert.deepEqual(lists[0].names, ["Pat Example", "Sam Sample", "New Person"]);
+  assert.deepEqual(lists[0].added, ["Jane Doe"]);
+  await waitForHighlights(page, ["Jane Doe"]);
+
+  // Once the source lists them itself, the local copy is dropped.
+  listBody = "Pat Example\nJane Doe | now upstream\n";
+  await refresh("synced");
+  ({ lists } = await getStorage("lists"));
+  assert.equal("added" in lists[0], false);
+  assert.deepEqual(lists[0].names, ["Pat Example", "Jane Doe | now upstream"]);
+  await waitForHighlights(page, ["Jane Doe"]);
+  await page.close();
+});
+
+test("a name added from the page goes straight into a list you maintain", async () => {
+  await reset();
+  const page = await openPage("/article.html");
+  await waitForHighlights(page, ["Jane Doe", "John Roe", "Ruth A. Okafor", "John Roe"]);
+  await pickFromMenu("people", "Sam Sample");
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].names, [...PEOPLE.names, "Sam Sample"]);
+  assert.equal("added" in lists[0], false);
+  await page.close();
+});
+
+test("the panel lets you add to a synced list, and Stop syncing keeps your additions", async () => {
+  await reset({ lists: [syncedList({ added: ["Jane Doe"] })] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+  assert.equal(await panel.textContent(".list .count"), "2 names");
+  assert.equal(await panel.getByLabel("Names", { exact: true }).isEditable(), false, "synced names are read-only");
+  const mine = panel.getByRole("textbox", { name: "Your additions" });
+  assert.equal(await mine.inputValue(), "Jane Doe");
+
+  await mine.fill("Jane Doe\nJohn Roe | by hand");
+  await panel.waitForTimeout(400);
+  let { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].added, ["Jane Doe", "John Roe | by hand"]);
+  assert.equal(await panel.textContent(".list .count"), "3 names");
+
+  await panel.getByRole("button", { name: "Stop syncing" }).click();
+  await panel.waitForTimeout(400);
+  ({ lists } = await getStorage("lists"));
+  assert.equal("source" in lists[0], false);
+  assert.equal("added" in lists[0], false);
+  assert.deepEqual(lists[0].names, ["Pat Example | from the URL list", "Jane Doe", "John Roe | by hand"]);
+  assert.equal(await panel.getByRole("textbox", { name: "Your additions" }).isVisible(), false);
+  await panel.close();
+});
+
+test("an open panel picks up a name added from the page instead of overwriting it", async () => {
+  await reset({ lists: [PEOPLE, syncedList()] });
+  const panel = await openPanel();
+  await panel.waitForSelector(".list");
+
+  const page = await openPage("/article.html");
+  await pickFromMenu("people", "Sam Sample");
+  await pickFromMenu("synced", "Lee Tester");
+  await page.close();
+
+  // The panel shows both, so its next save keeps them.
+  await panel.waitForFunction(() => document.querySelector(".list .count").textContent === "4 names");
+  const second = panel.locator(".list").nth(1);
+  await second.locator(".toggle").click();
+  await second.getByLabel(/Highlight this list/).uncheck();
+  await panel.waitForTimeout(400);
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].names, [...PEOPLE.names, "Sam Sample"]);
+  assert.deepEqual(lists[1].added, ["Lee Tester"]);
+  assert.equal(lists[1].enabled, false, "the panel's own change still saved");
+  await panel.close();
+});
+
+// --- Sending additions to GitHub -----------------------------------------------------------
+
+const DEVELOPER = { paused: false, disabledHosts: [], developerMode: true };
+const GOP_SOURCE = "https://raw.githubusercontent.com/jstock29/take-radar/main/lists/republican-operatives.txt";
+const gopList = (added) => ({
+  ...PEOPLE,
+  id: "gop",
+  name: "Republican operatives",
+  names: ["Alex Conant | Republican strategist"],
+  source: { url: GOP_SOURCE, updatedAt: 1, error: "" },
+  added,
+});
+// Click "Submit new names" and return the address it tries to open. Tab
+// addresses aren't visible to an extension without the "tabs" permission, so
+// the panel's tabs.create is replaced to capture it (and to keep the test off
+// the network).
+const sendToGitHub = async (panel) => {
+  await panel.evaluate(() => {
+    window.__opened = [];
+    chrome.tabs.create = async ({ url }) => void window.__opened.push(url);
+  });
+  await panel.getByRole("button", { name: /Submit new names?/ }).click();
+  await panel.waitForFunction(() => window.__opened.length > 0);
+  const opened = await panel.evaluate(() => window.__opened);
+  assert.equal(opened.length, 1, "opens exactly one tab");
+  return new URL(opened[0]);
+};
+
+test("Submit new names opens a pre-filled issue, but only once every operative has a note", async () => {
+  await reset({ lists: [gopList(["Jane Doe"])], settings: DEVELOPER });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+
+  // No note: refused, with the names that need one.
+  await panel.getByRole("button", { name: /Submit new names?/ }).click();
+  assert.match(await panel.textContent(".added-block .sync-error"), /needs a note.*: Jane Doe$/);
+
+  // A line the workflow would refuse is caught here, naming the line.
+  await panel.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster\n# not a name | note");
+  await panel.getByRole("button", { name: /Submit new names?/ }).click();
+  assert.match(await panel.textContent(".added-block .sync-error"), /Can.t submit .# not a name \| note. would become a comment/);
+
+  await panel.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster\nJohn Roe | strategist");
+  const url = await sendToGitHub(panel);
+  assert.equal(url.origin + url.pathname, "https://github.com/jstock29/take-radar/issues/new");
+  assert.equal(url.searchParams.get("title"), "Add 2 names to republican-operatives.txt");
+  assert.match(url.searchParams.get("body"), /```\nJane Doe \| pollster\nJohn Roe \| strategist\n```/);
+  assert.equal(await panel.locator(".added-block .sync-error").isVisible(), false, "the refusal clears once it works");
+  await panel.close();
+});
+
+test("Submit new names is only offered for lists from this repo, and only with additions", async () => {
+  const other = syncedList({ added: ["Jane Doe"] });
+  await reset({ lists: [other, gopList(undefined)], settings: DEVELOPER });
+  const panel = await openPanel();
+  const submit = (list) => list.getByRole("button", { name: /Submit new names?/ });
+  const [a, b] = [panel.locator(".list").nth(0), panel.locator(".list").nth(1)];
+  await a.locator(".toggle").click();
+  assert.equal(await a.getByRole("button", { name: "Copy" }).isVisible(), true);
+  assert.equal(await submit(a).isVisible(), false, "a URL list from elsewhere");
+  await b.locator(".toggle").click();
+  assert.equal(await submit(b).isVisible(), false, "nothing to submit yet");
+
+  await b.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster");
+  assert.equal(await submit(b).textContent(), "Submit new name");
+  await b.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster\nJohn Roe | strategist");
+  assert.equal(await submit(b).textContent(), "Submit new names");
+  await panel.close();
+});
+
+test("Developer mode is off by default, hides the button, and is switched on in the full-page view", async () => {
+  await reset({ lists: [gopList(["Jane Doe | pollster"])] });
+
+  // The popup-sized view has no switch, and no button.
+  let panel = await openPanel();
+  await panel.click(".list .toggle");
+  await panel.click("#about summary");
+  assert.equal(await panel.locator("#developer").isVisible(), false);
+  assert.equal(await panel.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
+  assert.equal(await panel.getByRole("button", { name: "Copy" }).isVisible(), true, "copying isn't affected");
+  await panel.close();
+
+  // The full-page view has the switch; turning it on saves and shows the button.
+  panel = await context.newPage();
+  await panel.setViewportSize({ width: 900, height: 700 });
+  await panel.goto(`chrome-extension://${extensionId}/options.html`);
+  await panel.click(".list .toggle");
+  await panel.click("#about summary");
+  assert.equal(await panel.getByLabel("Developer mode").isChecked(), false);
+  assert.equal(await panel.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
+  await panel.getByLabel("Developer mode").check();
+  await panel.getByRole("button", { name: "Submit new name" }).waitFor();
+  await panel.waitForTimeout(400);
+  const { settings } = await getStorage("settings");
+  assert.equal(settings.developerMode, true);
+  assert.equal(settings.paused, false, "other settings are kept");
+
+  // Once on, the popup-sized view shows the button and keeps the switch so it can be turned off.
+  const small = await openPanel();
+  await small.click(".list .toggle");
+  await small.click("#about summary");
+  assert.equal(await small.getByRole("button", { name: "Submit new name" }).isVisible(), true);
+  await small.getByLabel("Developer mode").uncheck();
+  assert.equal(await small.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
+  await small.waitForTimeout(400);
+  assert.equal((await getStorage("settings")).settings.developerMode, false);
+  // ...and the other open view follows.
+  await panel.waitForFunction(() => !document.querySelector("#developerMode").checked);
+  await small.close();
+  await panel.close();
+});
+
+test("a name added from the page reaches an options tab left in the background, even with its box focused", async () => {
+  await reset({ lists: [syncedList()] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+  const box = panel.getByRole("textbox", { name: "Your additions" });
+  await box.focus();
+
+  // Another tab comes to the front; the panel keeps its focused box but loses focus itself.
+  const page = await openPage("/article.html");
+  await pickFromMenu("synced", "Lee Tester");
+  await panel.waitForFunction(() => document.querySelector("textarea.added").value === "Lee Tester");
+
+  // Typing on afterwards adds to it rather than replacing it.
+  await panel.bringToFront();
+  await box.press("Control+End");
+  await box.pressSequentially("\nPat Added | note");
+  await panel.waitForTimeout(400);
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].added, ["Lee Tester", "Pat Added | note"]);
+  await page.close();
+  await panel.close();
+});
+
+// --- About ---------------------------------------------------------------------------------
+
+test("the options page shows its version and an About panel, collapsed until asked for", async () => {
+  await reset({ lists: [] });
+  const panel = await openPanel();
+  const { version } = JSON.parse(fs.readFileSync(path.join(REPO, "manifest.json"), "utf8"));
+
+  // A quiet version line is always there; the details aren't until opened.
+  assert.equal(await panel.textContent("#version"), `Take Radar v${version}`);
+  assert.equal(await panel.locator(".about-body").isVisible(), false);
+  assert.match(await panel.textContent(".empty"), /Nothing highlighted yet/);
+
+  await panel.click("#about summary");
+  assert.equal(await panel.locator(".about-body").isVisible(), true);
+  assert.match(await panel.textContent("#shortcut"), /Alt\+Shift\+R pauses and resumes|No keyboard shortcut/);
+  assert.match(await panel.textContent(".about-body"), /stay in this browser/);
+  const links = await panel.locator(".about-links a").evaluateAll((as) => as.map((a) => [a.href, a.target, a.rel]));
+  assert.deepEqual(links, [
+    ["https://github.com/jstock29/take-radar", "_blank", "noreferrer"],
+    ["https://github.com/jstock29/take-radar/issues", "_blank", "noreferrer"],
+  ]);
+  await panel.close();
+});
+
+test("adding from the page says so when it can't be saved, and the next add still works", async () => {
+  await reset();
+  const page = await openPage("/article.html");
+  await waitForHighlights(page, ["Jane Doe", "John Roe", "Ruth A. Okafor", "John Roe"]);
+
+  await worker.evaluate(() => {
+    globalThis.realSet = chrome.storage.local.set.bind(chrome.storage.local);
+    chrome.storage.local.set = () => Promise.reject(new Error("quota exceeded"));
+  });
+  try {
+    await pickFromMenu("people", "Sam Sample");
+    await toastText(page, "Couldn’t save that name");
+  } finally {
+    await worker.evaluate(() => (chrome.storage.local.set = globalThis.realSet));
+  }
+  assert.deepEqual((await getStorage("lists")).lists[0].names, PEOPLE.names, "nothing was half-saved");
+
+  await pickFromMenu("people", "Sam Sample");
+  await toastText(page, "Added “Sam Sample” to People");
+  assert.deepEqual((await getStorage("lists")).lists[0].names, [...PEOPLE.names, "Sam Sample"]);
+  await page.close();
+});
+
+test("a refresh that lands while you're typing in the panel isn't undone by your save", async () => {
+  listBody = "Pat Example | from the URL list\n";
+  await reset({ lists: [syncedList()] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+
+  // A save of this edit is pending (250ms) when the refresh finishes.
+  await panel.getByRole("textbox", { name: "Your additions" }).fill("Lee Tester");
+  listBody = "Pat Example | from the URL list\nNew Upstream | arrived mid-edit\n";
+  assert.equal((await refresh("synced"))["synced"], "ok");
+  await panel.waitForTimeout(600);
+
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].names, ["Pat Example | from the URL list", "New Upstream | arrived mid-edit"]);
+  assert.deepEqual(lists[0].added, ["Lee Tester"], "and what you typed is kept");
+  assert.equal(await panel.textContent(".list .count"), "3 names");
+  await panel.close();
+});

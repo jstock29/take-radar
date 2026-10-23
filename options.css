@@ -114,7 +114,8 @@ main {
 .empty {
   color: var(--muted);
   text-align: center;
-  padding: 24px 0;
+  padding: 20px 16px 24px;
+  line-height: 1.5;
 }
 
 /* --- List card ------------------------------------------------------------- */
@@ -606,6 +607,26 @@ body.paused #lists {
 textarea.readonly {
   color: var(--muted);
 }
+.added-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.added-label .link-btn {
+  text-transform: none;
+  letter-spacing: normal;
+}
+.added-actions {
+  display: flex;
+  gap: 4px;
+}
+.added-block .sync-error {
+  margin-top: 6px;
+  font-size: 12px;
+}
+textarea.added {
+  height: 72px;
+}
 
 /* --- Starter lists ------------------------------------------------------------------ */
 
@@ -790,4 +811,84 @@ textarea.readonly {
   padding: 2px 8px;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* --- About ---------------------------------------------------------------------- */
+
+.about {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.about summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.about summary::-webkit-details-marker {
+  display: none;
+}
+.version {
+  font-variant-numeric: tabular-nums;
+}
+.about-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.about summary:hover .about-toggle {
+  color: var(--text);
+}
+.about-toggle svg {
+  transition: transform 0.15s;
+}
+.about[open] .about-toggle svg {
+  transform: rotate(90deg);
+}
+.about-body {
+  padding: 2px 4px 0;
+  line-height: 1.5;
+}
+.about-body p {
+  margin: 0 0 10px;
+}
+.about dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0 0 10px;
+}
+.about dt {
+  color: var(--text);
+  font-weight: 600;
+}
+.about dd {
+  margin: 0;
+}
+.about a {
+  color: var(--accent);
+}
+.developer {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.developer .check {
+  color: var(--text);
+}
+
+.logo {
+  flex: none;
+  border-radius: 5px;
+}
+.empty strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text);
+  font-size: 14px;
 }

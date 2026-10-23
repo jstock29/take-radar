@@ -1,10 +1,10 @@
 // Chrome runs this as a service worker and needs the helpers pulled in here;
 // Firefox and Safari load them first via manifest "background.scripts".
 if (typeof TakeRadar === "undefined" && typeof importScripts === "function") {
-  importScripts("shared.js");
+  importScripts("shared.js", "additions.js");
 }
 
-const { ext, normalizeList, normalizeSettings, fetchList } = TakeRadar;
+const { ext, normalizeList, normalizeSettings, fetchList, addSelection, pruneAdded } = TakeRadar;
 const action = ext.action ?? ext.browserAction;
 
 // --- Install and upgrade --------------------------------------------------------
@@ -23,6 +23,7 @@ ext.runtime.onInstalled.addListener(async ({ reason }) => {
   }
   await ext.storage.local.set({ lists });
   scheduleRefresh();
+  rebuildMenu();
 
   // Nothing is highlighted until a list exists, so show the lists page.
   if (reason === "install") ext.runtime.openOptionsPage();
@@ -37,6 +38,32 @@ async function legacySyncedLists() {
     // storage.sync can be unavailable (e.g. sync disabled, some Safari setups).
     return null;
   }
+}
+
+// --- Changing the stored lists -------------------------------------------------------
+
+// The stored lists, normalized (and empty if nothing usable is stored yet).
+const readLists = async () => {
+  const { lists } = await ext.storage.local.get("lists");
+  return (Array.isArray(lists) ? lists : []).map(normalizeList);
+};
+
+// Every change to the stored lists goes through here, one at a time. A list
+// refresh finishing just as a name is added from the page would otherwise
+// each read the old lists and the second write would undo the first.
+// `change` gets the normalized lists and returns { lists, ...result }: the
+// lists to store (leave out to store nothing), and whatever else the caller
+// wants back.
+let listsQueue = Promise.resolve();
+
+function editLists(change) {
+  const run = listsQueue.then(async () => {
+    const { lists, ...result } = change(await readLists());
+    if (lists) await ext.storage.local.set({ lists });
+    return result;
+  });
+  listsQueue = run.catch(() => {});
+  return run;
 }
 
 // --- Lists synced from a URL --------------------------------------------------------
@@ -60,10 +87,7 @@ ext.permissions?.onAdded?.addListener(() => refreshLists());
  * Returns { [listId]: "ok" | errorMessage }.
  */
 async function refreshLists(ids) {
-  const { lists: stored = [] } = await ext.storage.local.get("lists");
-  const targets = stored
-    .map(normalizeList)
-    .filter((l) => l.source && (!ids || ids.includes(l.id)));
+  const targets = (await readLists()).filter((l) => l.source && (!ids || ids.includes(l.id)));
   if (!targets.length) return {};
 
   const results = new Map(
@@ -80,22 +104,94 @@ async function refreshLists(ids) {
     ),
   );
 
-  // Re-read so edits made while the fetches were running aren't lost.
-  const { lists: latest = [] } = await ext.storage.local.get("lists");
-  const next = latest.map(normalizeList).map((list) => {
-    const result = results.get(list.id);
-    if (!result || !list.source) return list;
-    if (result.error) return { ...list, source: { ...list.source, error: result.error } };
-    return {
-      ...list,
-      names: result.names,
-      source: { ...list.source, updatedAt: Date.now(), error: "" },
-    };
-  });
-  await ext.storage.local.set({ lists: next });
+  // Merge into whatever is stored now, so edits made while the fetches were
+  // running aren't lost.
+  await editLists((latest) => ({
+    lists: latest.map((list) => {
+      const result = results.get(list.id);
+      if (!result || !list.source) return list;
+      if (result.error) return { ...list, source: { ...list.source, error: result.error } };
+      const refreshed = {
+        ...list,
+        names: result.names,
+        source: { ...list.source, updatedAt: Date.now(), error: "" },
+      };
+      // Names you added by hand stay until the source lists them itself.
+      const added = pruneAdded(list.added, result.names);
+      if (added.length) refreshed.added = added;
+      else delete refreshed.added;
+      return refreshed;
+    }),
+  }));
 
   return Object.fromEntries([...results].map(([id, r]) => [id, r.error ?? "ok"]));
 }
+
+// --- Adding a name from the page ---------------------------------------------------
+// Select a name, right-click, pick a list.
+
+const MENU_ROOT = "add-to-list";
+let menuKey = null; // which lists the menu was last built for
+let menuQueue = Promise.resolve();
+
+// Menu items persist between browser sessions but not across lists changing,
+// so rebuild whenever the set of lists (or their names) does.
+function rebuildMenu() {
+  if (!ext.contextMenus) return menuQueue; // not on every browser
+  menuQueue = menuQueue.then(async () => {
+    const lists = await readLists();
+    const key = JSON.stringify(lists.map((l) => [l.id, l.name]));
+    if (key === menuKey) return;
+    await ext.contextMenus.removeAll();
+    if (lists.length) {
+      const create = (props) =>
+        ext.contextMenus.create({ contexts: ["selection"], ...props }, () => void ext.runtime.lastError);
+      create({ id: MENU_ROOT, title: "Add to Take Radar list" });
+      for (const list of lists) {
+        create({ id: `${MENU_ROOT}:${list.id}`, parentId: MENU_ROOT, title: list.name || "Untitled" });
+      }
+    }
+    menuKey = key; // only once built, so a failed rebuild is tried again
+  }).catch(() => {
+    menuKey = null;
+  });
+  return menuQueue;
+}
+
+ext.runtime.onStartup?.addListener(rebuildMenu);
+
+// Add text to a list in storage. Resolves to { status, name, listName }.
+function addToList(listId, text) {
+  return editLists((lists) => {
+    const list = lists.find((l) => l.id === listId);
+    if (!list) return { status: "missing", name: "", listName: "" };
+    const result = addSelection(list, text);
+    return { ...result, listName: list.name, lists: result.status === "added" ? lists : undefined };
+  });
+}
+
+const TOAST_TEXT = {
+  added: ({ name, listName }) => `Added “${name}” to ${listName}`,
+  duplicate: ({ name, listName }) => `“${name}” is already on ${listName}`,
+  invalid: () => "Select just a person’s name to add it",
+  missing: () => "That list no longer exists",
+  failed: () => "Couldn’t save that name",
+};
+
+// The page confirms in its top frame, whichever frame the selection was in.
+async function handleMenuClick(info, tab) {
+  const id = String(info.menuItemId);
+  if (!id.startsWith(`${MENU_ROOT}:`)) return;
+  const result = await addToList(id.slice(MENU_ROOT.length + 1), info.selectionText).catch(() => ({
+    status: "failed",
+  }));
+  if (tab?.id != null) {
+    const text = TOAST_TEXT[result.status](result);
+    ext.tabs.sendMessage(tab.id, { type: "toast", text }, { frameId: 0 })?.catch?.(() => {});
+  }
+}
+
+ext.contextMenus?.onClicked.addListener(handleMenuClick);
 
 // --- Match count badge -----------------------------------------------------------
 
@@ -192,6 +288,10 @@ ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true; // respond asynchronously
   }
   return false;
+});
+
+ext.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.lists) rebuildMenu();
 });
 
 ext.commands?.onCommand.addListener(async (command) => {

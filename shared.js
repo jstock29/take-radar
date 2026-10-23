@@ -63,8 +63,6 @@
     return { r: f(5), g: f(3), b: f(1) };
   };
 
-  // --- Lists --------------------------------------------------------------
-
   // --- Names and list files -------------------------------------------------
   // A list entry is "Name" or "Name | note"; the note shows in the tooltip.
 
@@ -127,6 +125,13 @@
 
   const joinEntry = ({ name, note }) => (note ? `${name} | ${note}` : name);
 
+  // --- Entries on a list ---------------------------------------------------------
+  // A list synced from a URL is read-only and replaced on every refresh, so
+  // names added by hand live beside it in `list.added` (see additions.js).
+
+  /** Every entry a list matches on: its names, then the ones you added. */
+  const listEntries = (list) => (list.added?.length ? [...list.names, ...list.added] : list.names);
+
   /** Fetch and parse a list from a URL (CSV if the path ends in .csv). */
   const fetchList = async (url) => {
     const res = await fetch(url, { cache: "no-cache", credentials: "omit" });
@@ -144,6 +149,7 @@
       name: "Republican operatives",
       description: "Strategists, pollsters, campaign and party staff, including ones now working in media.",
       file: "lists/republican-operatives.txt",
+      requireNotes: true, // every entry says who the person is (enforced by the unit tests)
       style: { fill: "#ff3b3026", border: "#ff3b30ff", borderWidth: 1 },
     },
     {
@@ -151,6 +157,7 @@
       name: "Democratic operatives",
       description: "Strategists, pollsters, campaign and party staff, including ones now working in media.",
       file: "lists/democratic-operatives.txt",
+      requireNotes: true,
       style: { fill: "#0a84ff26", border: "#0a84ffff", borderWidth: 1 },
     },
     {
@@ -162,14 +169,14 @@
     },
   ].map((s) => ({ ...s, url: LISTS_BASE + s.file.split("/").pop() }));
 
-  // --- Lists ------------------------------------------------------------------
+  // --- Stored lists ------------------------------------------------------------
 
   /**
    * Bring a stored list up to the current shape. Versions before 0.4 stored
    * a single opaque `color`; that becomes the fill. A list synced from a URL
-   * carries `source: { url, updatedAt, error }`. `enabled: false` hides a
-   * list without deleting it; `followups: false` turns off last-name-only
-   * matches for it.
+   * carries `source: { url, updatedAt, error }` and may have `added`, names
+   * you put on it yourself. `enabled: false` hides a list without deleting
+   * it; `followups: false` turns off last-name-only matches for it.
    */
   const normalizeList = (list = {}) => {
     const fill = parseColor(list.fill) ?? parseColor(list.color);
@@ -193,18 +200,25 @@
         error: typeof list.source.error === "string" ? list.source.error : "",
       };
     }
+    // Additions only exist beside a source; on a list you edit directly
+    // they're just more names.
+    const added = Array.isArray(list.added) ? list.added.filter((n) => typeof n === "string") : [];
+    if (out.source && added.length) out.added = added;
+    else out.names = out.names.concat(added);
     return out;
   };
 
   // --- Settings ---------------------------------------------------------------
 
-  const DEFAULT_SETTINGS = { paused: false, disabledHosts: [] };
+  const DEFAULT_SETTINGS = { paused: false, disabledHosts: [], developerMode: false };
 
   const normalizeSettings = (s = {}) => ({
     paused: Boolean(s?.paused),
     disabledHosts: Array.isArray(s?.disabledHosts)
       ? s.disabledHosts.filter((h) => typeof h === "string")
       : [],
+    // Shows maintainer-only controls (submitting names to the project's lists).
+    developerMode: Boolean(s?.developerMode),
   });
 
   // --- Highlight style --------------------------------------------------------
@@ -302,6 +316,7 @@
     hsvToRgb,
     splitEntry,
     parseListText,
+    listEntries,
     fetchList,
     normalizeList,
     normalizeSettings,

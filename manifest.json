@@ -2,11 +2,12 @@
   "manifest_version": 3,
   "name": "Take Radar",
   "description": "Highlights the people you're keeping an eye on, on every website you visit.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "permissions": [
     "storage",
     "alarms",
-    "activeTab"
+    "activeTab",
+    "contextMenus"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -21,6 +22,7 @@
     "service_worker": "background.js",
     "scripts": [
       "shared.js",
+      "additions.js",
       "background.js"
     ]
   },

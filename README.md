@@ -16,6 +16,12 @@ notes.
 - **On this page**: the popup lists who was found on the current tab; click
   a name to scroll to each mention in turn.
 - **Hide a list** without deleting it.
+- **Add names as you see them**: select a name on any page, right-click, and
+  pick **Add to Take Radar list**. On a list you maintain yourself the name
+  goes straight onto it. On a list that syncs from a URL (the starter lists),
+  it goes under **Your additions**, which a refresh never touches; once the
+  source lists the same name, your copy is dropped. **Copy** on that box gives
+  the additions in list-file format, ready to paste into the source.
 
 - **Starter lists**, all opt-in: Republican operatives, Democratic
   operatives, and the Harper's Letter signatories (see `lists/`).
@@ -34,12 +40,14 @@ notes.
 | --- | --- |
 | `manifest.json` | MV3 manifest that works in Chrome, Safari and Firefox |
 | `shared.js` | List and settings shapes, list-file parsing, colors and the highlight style; shared by every context |
+| `additions.js` | Names added by hand, and sending them to the starter lists; used by the background script and settings page, not loaded into web pages |
 | `matcher.js` | Finds names in text (accents, initials, middle initials); no DOM, so it's unit-tested |
 | `content.js` | Walks the page and its shadow roots, wraps matches in highlights, reports the count |
 | `background.js` | Install/upgrade, the toolbar badge, scheduled list refreshes, the pause shortcut |
-| `options.html/.css/.js` | The settings panel, used both as the toolbar popup and as a full-page options tab |
+| `options.html/.css/.js` | The settings panel, used both as the toolbar popup and as a full-page options tab, with the version and an About section at the bottom |
 | `color-picker.js` | The in-panel color picker (see below) |
 | `lists/` | The starter lists, bundled and synced from GitHub |
+| `scripts/` | Packaging and store-publishing scripts, and `apply-list-additions.mjs` (adds names from a "Submit new names" issue to a list file) |
 | `tests/` | Unit tests (`npm test`) and end-to-end tests in Chromium (`npm run test:e2e`) |
 
 ## List format
@@ -59,6 +67,29 @@ header treats every cell as a name.
 
 To fix or add someone on a starter list, edit the file in `lists/` and
 merge to `main`; installed copies pick it up within 12 hours.
+
+### Submitting additions to the starter lists (developer mode)
+
+This is for whoever maintains the starter lists, so it's hidden by default.
+Turn on **Developer mode** in the options page's **About** section (open the
+full-page tab with the button in the popup's header). A starter list's **Your
+additions** then gets a **Submit new names** button. It opens a new issue on
+this repo with the names filled in (each operative needs a note, so it asks
+for one first). When the repository owner submits that issue,
+`.github/workflows/apply-list-additions.yml` runs
+`scripts/apply-list-additions.mjs`, which adds the names under an "Added from
+the extension" heading at the end of the list file, runs the unit tests (they
+enforce the list rules), commits to `main` and closes the issue. If the tests
+fail (or another change to the same list lands at the same moment) it
+comments with why and commits nothing; edit the issue and it tries again. The extension drops the names from *Your additions*
+the next time it refreshes the list.
+
+Issues from anyone else are never applied; they stay ordinary suggestions for
+the owner to review. The workflow's commit uses the built-in token, which
+doesn't start other workflows, so a list-only change doesn't trigger a store
+release. Names you added
+in the extension under **Your additions** drop out of the extension on their
+own once the refreshed file contains them.
 
 ## Why a custom color picker
 

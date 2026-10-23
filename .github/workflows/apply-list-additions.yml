@@ -1,0 +1,138 @@
+name: Apply list additions
+
+# The extension's "Submit new names" button (developer mode) opens an issue holding names to add
+# to a starter list. When the repository owner opens (or edits) one, this adds
+# the names to lists/, runs the unit tests (they enforce the list rules, e.g.
+# that every operative has a note), commits to main and closes the issue.
+#
+# Issues from anyone else are ignored here; they stay ordinary suggestions for
+# the owner to review. The commit is made with the workflow's own token, which
+# by design doesn't start other workflows, so a list-only change doesn't
+# trigger a Chrome Web Store release.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  issues: write
+
+# One run per issue. (A single shared group would keep only one *pending* run,
+# so submitting three issues quickly would silently drop the middle one.) Runs
+# for different issues can overlap; the push below handles main having moved.
+concurrency:
+  group: list-additions-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: >-
+      github.event.issue.state == 'open' &&
+      github.event.issue.user.login == github.repository_owner &&
+      github.event.sender.login == github.repository_owner &&
+      contains(github.event.issue.body, 'take-radar:additions')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # Reads the issue from the event file (never from the shell), edits the
+      # list file, and writes the reply to post.
+      - name: Add the names
+        id: apply
+        env:
+          COMMENT_FILE: ${{ runner.temp }}/comment.md
+        run: node scripts/apply-list-additions.mjs
+
+      - name: Test, commit and reply
+        if: steps.apply.outputs.status != 'skip'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+          STATUS: ${{ steps.apply.outputs.status }}
+          FILE: ${{ steps.apply.outputs.file }}
+          COUNT: ${{ steps.apply.outputs.count }}
+        run: |
+          set -uo pipefail
+          comment="$RUNNER_TEMP/comment.md"
+          reply() { gh issue comment "$ISSUE" --body-file "$1"; }
+
+          case "$STATUS" in
+            rejected)
+              reply "$comment"
+              exit 1
+              ;;
+            nothing)
+              reply "$comment"
+              gh issue close "$ISSUE" --reason "not planned"
+              exit 0
+              ;;
+          esac
+
+          # The list tests are the rules for what may be committed.
+          if ! npm test > "$RUNNER_TEMP/test.log" 2>&1; then
+            # Each failing test's name and message, without the passing noise.
+            failures=$(awk '/^not ok/{p=1} p && /^[[:space:]]+(code|stack):/{p=0} p' "$RUNNER_TEMP/test.log" \
+              | grep -vE '^[[:space:]]+(location|failureType|duration_ms|type):' | head -40)
+            [ -n "$failures" ] || failures=$(tail -20 "$RUNNER_TEMP/test.log")
+            {
+              echo "Adding these names breaks the list tests, so nothing was committed."
+              echo
+              echo '```'
+              echo "$failures"
+              echo '```'
+              echo
+              echo "Edit this issue to fix them and I'll try again."
+            } > "$RUNNER_TEMP/failure.md"
+            reply "$RUNNER_TEMP/failure.md"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lists
+          git commit -q \
+            -m "Add $COUNT name(s) to $FILE" \
+            -m "From $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/$ISSUE"
+
+          # main may have moved while this ran (another list's issue, or you
+          # committing): put this commit on top of it and try again. Two issues
+          # appending to the same file at once can conflict; that one is
+          # reported so it can be retried by editing the issue.
+          result=failed
+          for attempt in 1 2 3 4 5; do
+            if ! git pull -q --rebase origin "$BRANCH"; then
+              git rebase --abort || true
+              result=conflict
+              break
+            fi
+            if git push -q origin "HEAD:$BRANCH"; then
+              result=pushed
+              break
+            fi
+            [ "$attempt" -lt 5 ] && sleep "$attempt"
+          done
+          if [ "$result" != pushed ]; then
+            {
+              if [ "$result" = conflict ]; then
+                echo "Another change to \`$FILE\` landed at the same moment and conflicted with this one. Nothing was committed."
+                echo
+                echo "Edit this issue (any small change) and I'll try again."
+              else
+                echo "The names passed the tests but I couldn't push to \`$BRANCH\` (is it protected?). Nothing was committed."
+                echo
+                echo "See the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+              fi
+            } > "$RUNNER_TEMP/push-failed.md"
+            reply "$RUNNER_TEMP/push-failed.md"
+            exit 1
+          fi
+
+          printf '\nCommitted in %s/%s/commit/%s.\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$(git rev-parse HEAD)" >> "$comment"
+          reply "$comment"
+          gh issue close "$ISSUE" --reason completed

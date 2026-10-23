@@ -6,6 +6,11 @@ const {
   normalizeSettings,
   parseColor,
   parseListText,
+  listEntries,
+  starterOf,
+  withoutNote,
+  problemWith,
+  additionsIssueUrl,
   fetchList,
   toHex8,
   toCss,
@@ -98,6 +103,104 @@ const PRESETS = [
 // Only one color picker is open at a time across all lists.
 let closeOpenPicker = null;
 
+// --- Your additions -------------------------------------------------------------
+
+// Set a textarea from a list of lines, unless it already says that (assigning
+// moves the caret).
+const setText = (field, lines) => {
+  const text = lines.join("\n");
+  if (field.value !== text) field.value = text;
+};
+
+// The "Your additions" box under a synced list's names. They're kept apart
+// from the synced names so a refresh doesn't replace them. "Copy" gives them
+// in list-file form; in developer mode, "Submit new names" sends the ones for
+// a starter list to this project's repo as a pre-filled GitHub issue, which
+// the owner's account applies automatically (anyone else's is a suggestion).
+// `refresh()` brings the box up to date with the list after it changed.
+function additionsBlock(list, { onEdit }) {
+  const area = el("textarea", {
+    className: "added",
+    placeholder: "Names you add here stay when this list refreshes. One per line, with an optional note after a |.",
+    spellcheck: false,
+    ariaLabel: "Your additions",
+  });
+  area.addEventListener("input", () => {
+    const lines = area.value
+      .split("\n")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (lines.length) list.added = lines;
+    else delete list.added;
+    actions();
+    onEdit();
+    scheduleSave();
+  });
+
+  const copy = el("button", { type: "button", className: "link-btn", textContent: "Copy" });
+  copy.title = "Copy your additions in list-file format";
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText((list.added ?? []).join("\n") + "\n");
+      showStatus("Copied", { fade: true });
+    } catch {
+      area.select(); // no clipboard access here; leave it selected to copy by hand
+    }
+  });
+
+  const error = el("div", { className: "sync-error", hidden: true });
+  const submit = el("button", { type: "button", className: "link-btn" });
+  submit.title = "Opens a pre-filled issue on this project's GitHub page with these names";
+  submit.addEventListener("click", () => {
+    const starter = starterOf(list);
+    const entries = list.added ?? [];
+    const problem = (() => {
+      if (!starter || !entries.length) return "";
+      // The same rules the workflow applies, so a bad line is caught here
+      // instead of in a comment on GitHub.
+      const unusable = entries.map((e) => [e, problemWith(e)]).filter(([, why]) => why);
+      if (unusable.length) {
+        const shown = (e) => (e.length > 40 ? `${e.slice(0, 40)}\u2026` : e);
+        return `Can\u2019t submit ${unusable.map(([e, why]) => `\u201c${shown(e)}\u201d ${why}`).join("; ")}`;
+      }
+      const bare = starter.requireNotes ? withoutNote(entries) : [];
+      if (bare.length) {
+        return `Each name on this list needs a note saying who they are. Add one after a | for: ${bare.join(", ")}`;
+      }
+      return additionsIssueUrl(starter, entries) ? "" : "That's too many to send at once. Send fewer, or Copy them instead.";
+    })();
+    error.textContent = problem;
+    error.hidden = !problem;
+    if (problem) return;
+    ext.tabs.create({ url: additionsIssueUrl(starter, entries) });
+  });
+
+  const actions = () => {
+    const any = Boolean(list.added?.length);
+    copy.hidden = !any;
+    submit.hidden = !settings.developerMode || !any || !starterOf(list);
+    submit.textContent = list.added?.length === 1 ? "Submit new name" : "Submit new names";
+    if (!any) error.hidden = true;
+  };
+
+  const block = el(
+    "div",
+    { className: "added-block" },
+    el("div", { className: "section-label added-label" }, "Your additions", el("span", { className: "added-actions" }, copy, submit)),
+    area,
+    error,
+  );
+
+  return {
+    el: block,
+    refresh() {
+      block.hidden = !list.source;
+      setText(area, list.added ?? []);
+      actions();
+    },
+  };
+}
+
 // --- One list card -----------------------------------------------------------
 
 function renderList(list, { open = false } = {}) {
@@ -132,7 +235,7 @@ function renderList(list, { open = false } = {}) {
 
   const count = el("span", { className: "count" });
   const updateCount = () => {
-    const n = list.names.length;
+    const n = listEntries(list).length;
     count.textContent = list.enabled === false ? "Hidden" : `${n} name${n === 1 ? "" : "s"}`;
     card.classList.toggle("disabled", list.enabled === false);
   };
@@ -312,11 +415,15 @@ function renderList(list, { open = false } = {}) {
     scheduleSave();
   });
 
+  // Names you add to a synced list live in their own box beside the synced ones.
+  const additions = additionsBlock(list, { onEdit: updateCount });
+
   // Lists synced from a URL are read-only here; the source is the truth.
   const syncInfo = el("div", { className: "sync-info" });
   const renderSync = () => {
     textarea.readOnly = Boolean(list.source);
     textarea.classList.toggle("readonly", Boolean(list.source));
+    additions.refresh();
     if (!list.source) {
       syncInfo.replaceChildren();
       syncInfo.hidden = true;
@@ -336,6 +443,12 @@ function renderList(list, { open = false } = {}) {
     unlink.title = "Keep these names and edit them here instead";
     unlink.addEventListener("click", () => {
       delete list.source;
+      // Your additions become ordinary names on the list you now own.
+      if (list.added) {
+        list.names = [...list.names, ...list.added];
+        delete list.added;
+        textarea.value = list.names.join("\n");
+      }
       renderSync();
       scheduleSave();
     });
@@ -349,7 +462,7 @@ function renderList(list, { open = false } = {}) {
 
   // Called when the background script refreshes this list's names.
   cardUpdaters.set(list.id, () => {
-    if (document.activeElement !== textarea) textarea.value = list.names.join("\n");
+    setText(textarea, list.names);
     updateCount();
     renderSync();
   });
@@ -402,6 +515,7 @@ function renderList(list, { open = false } = {}) {
     el("div", { className: "section-label", textContent: "Names" }),
     syncInfo,
     textarea,
+    additions.el,
   );
 
   card.append(header, body);
@@ -437,10 +551,12 @@ function renderEmptyState() {
     listsEl.querySelector(".empty")?.remove();
   } else if (!listsEl.querySelector(".empty")) {
     listsEl.append(
-      el("div", {
-        className: "empty",
-        textContent: "No lists yet. Add a starter list below, or make your own.",
-      }),
+      el(
+        "div",
+        { className: "empty" },
+        el("strong", { textContent: "Nothing highlighted yet" }),
+        "Add a starter list below, or make your own, and its names will be highlighted on every page you visit.",
+      ),
     );
   }
 }
@@ -669,6 +785,35 @@ powerBtn.addEventListener("click", () => {
   renderPower();
 });
 
+// --- Developer mode -------------------------------------------------------------------
+
+const developerEl = document.getElementById("developer");
+const developerBox = document.getElementById("developerMode");
+
+// The switch is only in the full-page view, so most people never see it; once
+// it's on it stays visible in the popup too, so it can always be turned off.
+function renderDeveloper() {
+  developerBox.checked = settings.developerMode;
+  developerEl.hidden = isPopup() && !settings.developerMode;
+  cardUpdaters.forEach((update) => update()); // show or hide each list's button
+}
+
+developerBox.addEventListener("change", () => {
+  settings.developerMode = developerBox.checked;
+  saveSettings();
+  renderDeveloper();
+});
+
+// --- About ------------------------------------------------------------------------------
+
+document.getElementById("version").textContent = `Take Radar v${ext.runtime.getManifest().version}`;
+
+function renderAbout() {
+  document.getElementById("shortcut").textContent = shortcut
+    ? `${shortcut} pauses and resumes highlighting everywhere.`
+    : "No keyboard shortcut is set. You can assign one in your browser\u2019s extension shortcut settings.";
+}
+
 // --- On this page -----------------------------------------------------------------------
 
 const onPageEl = document.getElementById("onPage");
@@ -747,16 +892,30 @@ ext.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     settings = normalizeSettings(changes.settings.newValue);
     renderPower();
+    renderDeveloper();
   }
   if (changes.lists) {
+    // Names change behind this page's back when a synced list refreshes or a
+    // name is added from the right-click menu; take those in so the next
+    // save here doesn't overwrite them. A synced list's names and source are
+    // the background script's and can't be edited here, so they're always
+    // taken. Everything else waits while someone is typing in a box here (or
+    // a save of what they typed is pending): their text wins.
+    const typing = saveTimer || (document.hasFocus() && document.activeElement?.tagName === "TEXTAREA");
+    const contents = (l) => JSON.stringify([l.names, l.added, l.source]);
     for (const stored of (changes.lists.newValue ?? []).map(normalizeList)) {
       const mine = lists.find((l) => l.id === stored.id);
-      if (!mine?.source || !stored.source) continue;
-      if (JSON.stringify([mine.names, mine.source]) === JSON.stringify([stored.names, stored.source])) {
-        continue;
+      if (!mine || contents(mine) === contents(stored)) continue;
+      if (mine.source && stored.source) {
+        mine.names = stored.names;
+        mine.source = stored.source;
       }
-      mine.names = stored.names;
-      mine.source = stored.source;
+      if (!typing) {
+        mine.names = stored.names;
+        mine.source = stored.source;
+        if (stored.added) mine.added = stored.added;
+        else delete mine.added;
+      }
       cardUpdaters.get(mine.id)?.();
     }
   }
@@ -783,5 +942,7 @@ ext.storage.onChanged.addListener((changes, area) => {
   renderEmptyState();
   renderStarters();
   renderPower();
+  renderAbout();
+  renderDeveloper();
   renderOnPage();
 })();

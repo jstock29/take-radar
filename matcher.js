@@ -122,7 +122,7 @@
     const entries = [];
     lists.forEach((list) => {
       if (list.enabled === false) return;
-      list.names.forEach((line) => {
+      TR.listEntries(list).forEach((line) => {
         const { name, note } = TR.splitEntry(line);
         const compiled = compileName(name);
         if (!compiled) return;
