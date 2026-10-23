@@ -46,7 +46,7 @@ notes.
 | `options.html/.css/.js` | The settings panel, used both as the toolbar popup and as a full-page options tab |
 | `color-picker.js` | The in-panel color picker (see below) |
 | `lists/` | The starter lists, bundled and synced from GitHub |
-| `scripts/` | Packaging and store-publishing scripts, and `apply-list-additions.mjs` (adds names from a "Send to GitHub" issue to a list file) |
+| `scripts/` | Packaging and store-publishing scripts, and `apply-list-additions.mjs` (adds names from a "Submit new names" issue to a list file) |
 | `tests/` | Unit tests (`npm test`) and end-to-end tests in Chromium (`npm run test:e2e`) |
 
 ## List format
@@ -67,11 +67,14 @@ header treats every cell as a name.
 To fix or add someone on a starter list, edit the file in `lists/` and
 merge to `main`; installed copies pick it up within 12 hours.
 
-### Sending additions from the extension
+### Submitting additions to the starter lists (developer mode)
 
-For a starter list, **Your additions** also has **Send to GitHub**. It opens a
-new issue on this repo with the names filled in (each operative needs a note,
-so it asks for one first). When the repository owner submits that issue,
+This is for whoever maintains the starter lists, so it's hidden by default.
+Turn on **Developer mode** at the bottom of the full-page options tab (the
+open-in-tab button in the popup's header). A starter list's **Your
+additions** then gets a **Submit new names** button. It opens a new issue on
+this repo with the names filled in (each operative needs a note, so it asks
+for one first). When the repository owner submits that issue,
 `.github/workflows/apply-list-additions.yml` runs
 `scripts/apply-list-additions.mjs`, which adds the names under an "Added from
 the extension" heading at the end of the list file, runs the unit tests (they

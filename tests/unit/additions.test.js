@@ -1,4 +1,4 @@
-// The workflow that applies "Send to GitHub" issues to the list files
+// The workflow that applies "Submit new names" issues to the list files
 // (scripts/apply-list-additions.mjs).
 const test = require("node:test");
 const assert = require("node:assert/strict");

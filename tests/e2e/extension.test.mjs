@@ -504,7 +504,7 @@ test("the panel lets you add to a synced list, and Stop syncing keeps your addit
   await panel.click(".list .toggle");
   assert.equal(await panel.textContent(".list .count"), "2 names");
   assert.equal(await panel.getByLabel("Names", { exact: true }).isEditable(), false, "synced names are read-only");
-  const mine = panel.getByLabel("Your additions");
+  const mine = panel.getByRole("textbox", { name: "Your additions" });
   assert.equal(await mine.inputValue(), "Jane Doe");
 
   await mine.fill("Jane Doe\nJohn Roe | by hand");
@@ -519,7 +519,7 @@ test("the panel lets you add to a synced list, and Stop syncing keeps your addit
   assert.equal("source" in lists[0], false);
   assert.equal("added" in lists[0], false);
   assert.deepEqual(lists[0].names, ["Pat Example | from the URL list", "Jane Doe", "John Roe | by hand"]);
-  assert.equal(await panel.getByLabel("Your additions").isVisible(), false);
+  assert.equal(await panel.getByRole("textbox", { name: "Your additions" }).isVisible(), false);
   await panel.close();
 });
 
@@ -548,6 +548,7 @@ test("an open panel picks up a name added from the page instead of overwriting i
 
 // --- Sending additions to GitHub -----------------------------------------------------------
 
+const DEVELOPER = { paused: false, disabledHosts: [], developerMode: true };
 const GOP_SOURCE = "https://raw.githubusercontent.com/jstock29/take-radar/main/lists/republican-operatives.txt";
 const gopList = (added) => ({
   ...PEOPLE,
@@ -557,8 +558,7 @@ const gopList = (added) => ({
   source: { url: GOP_SOURCE, updatedAt: 1, error: "" },
   added,
 });
-
-// Click "Send to GitHub" and return the address it tries to open. Tab
+// Click "Submit new names" and return the address it tries to open. Tab
 // addresses aren't visible to an extension without the "tabs" permission, so
 // the panel's tabs.create is replaced to capture it (and to keep the test off
 // the network).
@@ -567,23 +567,23 @@ const sendToGitHub = async (panel) => {
     window.__opened = [];
     chrome.tabs.create = async ({ url }) => void window.__opened.push(url);
   });
-  await panel.getByRole("button", { name: "Send to GitHub" }).click();
+  await panel.getByRole("button", { name: /Submit new names?/ }).click();
   await panel.waitForFunction(() => window.__opened.length > 0);
   const opened = await panel.evaluate(() => window.__opened);
   assert.equal(opened.length, 1, "opens exactly one tab");
   return new URL(opened[0]);
 };
 
-test("Send to GitHub opens a pre-filled issue, but only once every operative has a note", async () => {
-  await reset({ lists: [gopList(["Jane Doe"])] });
+test("Submit new names opens a pre-filled issue, but only once every operative has a note", async () => {
+  await reset({ lists: [gopList(["Jane Doe"])], settings: DEVELOPER });
   const panel = await openPanel();
   await panel.click(".list .toggle");
 
   // No note: refused, with the names that need one.
-  await panel.getByRole("button", { name: "Send to GitHub" }).click();
+  await panel.getByRole("button", { name: /Submit new names?/ }).click();
   assert.match(await panel.textContent(".added-block .sync-error"), /needs a note.*: Jane Doe$/);
 
-  await panel.getByLabel("Your additions").fill("Jane Doe | pollster\nJohn Roe | strategist");
+  await panel.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster\nJohn Roe | strategist");
   const url = await sendToGitHub(panel);
   assert.equal(url.origin + url.pathname, "https://github.com/jstock29/take-radar/issues/new");
   assert.equal(url.searchParams.get("title"), "Add 2 names to republican-operatives.txt");
@@ -592,18 +592,60 @@ test("Send to GitHub opens a pre-filled issue, but only once every operative has
   await panel.close();
 });
 
-test("Send to GitHub is only offered for lists from this repo, and only with additions", async () => {
+test("Submit new names is only offered for lists from this repo, and only with additions", async () => {
   const other = syncedList({ added: ["Jane Doe"] });
-  await reset({ lists: [other, gopList(undefined)] });
+  await reset({ lists: [other, gopList(undefined)], settings: DEVELOPER });
   const panel = await openPanel();
+  const submit = (list) => list.getByRole("button", { name: /Submit new names?/ });
   const [a, b] = [panel.locator(".list").nth(0), panel.locator(".list").nth(1)];
   await a.locator(".toggle").click();
   assert.equal(await a.getByRole("button", { name: "Copy" }).isVisible(), true);
-  assert.equal(await a.getByRole("button", { name: "Send to GitHub" }).isVisible(), false, "a URL list from elsewhere");
+  assert.equal(await submit(a).isVisible(), false, "a URL list from elsewhere");
   await b.locator(".toggle").click();
-  assert.equal(await b.getByRole("button", { name: "Send to GitHub" }).isVisible(), false, "nothing to send yet");
+  assert.equal(await submit(b).isVisible(), false, "nothing to submit yet");
 
-  await b.getByLabel("Your additions").fill("Jane Doe | pollster");
-  assert.equal(await b.getByRole("button", { name: "Send to GitHub" }).isVisible(), true);
+  await b.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster");
+  assert.equal(await submit(b).textContent(), "Submit new name");
+  await b.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster\nJohn Roe | strategist");
+  assert.equal(await submit(b).textContent(), "Submit new names");
+  await panel.close();
+});
+
+test("Developer mode is off by default, hides the button, and is switched on in the full-page view", async () => {
+  await reset({ lists: [gopList(["Jane Doe | pollster"])] });
+
+  // The popup-sized view has no switch, and no button.
+  let panel = await openPanel();
+  await panel.click(".list .toggle");
+  assert.equal(await panel.locator("#developer").isVisible(), false);
+  assert.equal(await panel.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
+  assert.equal(await panel.getByRole("button", { name: "Copy" }).isVisible(), true, "copying isn't affected");
+  await panel.close();
+
+  // The full-page view has the switch; turning it on saves and shows the button.
+  panel = await context.newPage();
+  await panel.setViewportSize({ width: 900, height: 700 });
+  await panel.goto(`chrome-extension://${extensionId}/options.html`);
+  await panel.click(".list .toggle");
+  assert.equal(await panel.getByLabel("Developer mode").isChecked(), false);
+  assert.equal(await panel.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
+  await panel.getByLabel("Developer mode").check();
+  await panel.getByRole("button", { name: "Submit new name" }).waitFor();
+  await panel.waitForTimeout(400);
+  const { settings } = await getStorage("settings");
+  assert.equal(settings.developerMode, true);
+  assert.equal(settings.paused, false, "other settings are kept");
+
+  // Once on, the popup-sized view shows the button and keeps the switch so it can be turned off.
+  const small = await openPanel();
+  await small.click(".list .toggle");
+  assert.equal(await small.getByRole("button", { name: "Submit new name" }).isVisible(), true);
+  await small.getByLabel("Developer mode").uncheck();
+  assert.equal(await small.getByRole("button", { name: /Submit new names?/ }).isVisible(), false);
+  await small.waitForTimeout(400);
+  assert.equal((await getStorage("settings")).settings.developerMode, false);
+  // ...and the other open view follows.
+  await panel.waitForFunction(() => !document.querySelector("#developerMode").checked);
+  await small.close();
   await panel.close();
 });

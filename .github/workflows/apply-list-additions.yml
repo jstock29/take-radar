@@ -1,6 +1,6 @@
 name: Apply list additions
 
-# The extension's "Send to GitHub" button opens an issue holding names to add
+# The extension's "Submit new names" button (developer mode) opens an issue holding names to add
 # to a starter list. When the repository owner opens (or edits) one, this adds
 # the names to lists/, runs the unit tests (they enforce the list rules, e.g.
 # that every operative has a note), commits to main and closes the issue.

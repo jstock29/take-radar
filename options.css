@@ -811,3 +811,9 @@ textarea.added {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* --- Developer mode ----------------------------------------------------------- */
+
+.developer {
+  padding: 4px 14px 14px;
+}

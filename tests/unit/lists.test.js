@@ -69,10 +69,11 @@ test("normalizeList upgrades the 0.3 `color` field and keeps sources", () => {
 });
 
 test("normalizeSettings fills defaults and drops junk", () => {
-  assert.deepEqual(normalizeSettings(undefined), { paused: false, disabledHosts: [] });
-  assert.deepEqual(normalizeSettings({ paused: 1, disabledHosts: ["a.com", 2] }), {
+  assert.deepEqual(normalizeSettings(undefined), { paused: false, disabledHosts: [], developerMode: false });
+  assert.deepEqual(normalizeSettings({ paused: 1, disabledHosts: ["a.com", 2], developerMode: "yes" }), {
     paused: true,
     disabledHosts: ["a.com"],
+    developerMode: true,
   });
 });
 

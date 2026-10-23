@@ -1,4 +1,4 @@
-// Adds the names in a "Send to GitHub" issue to the starter list it names.
+// Adds the names in a "Submit new names" issue to the starter list it names.
 // Run by .github/workflows/apply-list-additions.yml for issues opened (or
 // edited) by the repository owner; the issue's body is built by
 // additionsIssueUrl() in shared.js and parsed here.

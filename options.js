@@ -349,12 +349,12 @@ function renderList(list, { open = false } = {}) {
     }
   });
 
-  // Starter lists come from this project's repo: their additions can be sent
-  // there as a pre-filled GitHub issue, which the owner's account applies
-  // automatically (anyone else's is just a suggestion).
+  // Starter lists come from this project's repo: in developer mode their
+  // additions can be submitted there as a pre-filled GitHub issue, which the
+  // owner's account applies automatically (anyone else's is just a suggestion).
   const addedError = el("div", { className: "sync-error", hidden: true });
-  const sendAdded = el("button", { type: "button", className: "link-btn", textContent: "Send to GitHub" });
-  sendAdded.title = "Open a pre-filled GitHub issue suggesting these names";
+  const sendAdded = el("button", { type: "button", className: "link-btn" });
+  sendAdded.title = "Opens a pre-filled issue on this project's GitHub page with these names";
   sendAdded.addEventListener("click", () => {
     const starter = starterOf(list);
     const entries = list.added ?? [];
@@ -375,7 +375,8 @@ function renderList(list, { open = false } = {}) {
   const renderAddedActions = () => {
     const any = Boolean(list.added?.length);
     copyAdded.hidden = !any;
-    sendAdded.hidden = !any || !starterOf(list);
+    sendAdded.hidden = !settings.developerMode || !any || !starterOf(list);
+    sendAdded.textContent = list.added?.length === 1 ? "Submit new name" : "Submit new names";
     if (!any) addedError.hidden = true;
   };
 
@@ -755,6 +756,25 @@ powerBtn.addEventListener("click", () => {
   renderPower();
 });
 
+// --- Developer mode -------------------------------------------------------------------
+
+const developerEl = document.getElementById("developer");
+const developerBox = document.getElementById("developerMode");
+
+// The switch is only in the full-page view, so most people never see it; once
+// it's on it stays visible in the popup too, so it can always be turned off.
+function renderDeveloper() {
+  developerBox.checked = settings.developerMode;
+  developerEl.hidden = isPopup() && !settings.developerMode;
+  cardUpdaters.forEach((update) => update()); // show or hide each list's button
+}
+
+developerBox.addEventListener("change", () => {
+  settings.developerMode = developerBox.checked;
+  saveSettings();
+  renderDeveloper();
+});
+
 // --- On this page -----------------------------------------------------------------------
 
 const onPageEl = document.getElementById("onPage");
@@ -833,6 +853,7 @@ ext.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     settings = normalizeSettings(changes.settings.newValue);
     renderPower();
+    renderDeveloper();
   }
   if (changes.lists) {
     // Names change behind this page's back when a synced list refreshes or a
@@ -872,5 +893,6 @@ ext.storage.onChanged.addListener((changes, area) => {
   renderEmptyState();
   renderStarters();
   renderPower();
+  renderDeveloper();
   renderOnPage();
 })();

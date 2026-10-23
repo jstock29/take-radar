@@ -227,7 +227,8 @@
   ].map((s) => ({ ...s, url: LISTS_BASE + s.file.split("/").pop() }));
 
   // --- Sending additions back to the repo ----------------------------------------
-  // "Send to GitHub" opens a pre-filled new issue holding the names. When the
+  // "Submit new names" (shown in developer mode) opens a pre-filled new issue
+  // holding the names. When the
   // repository's owner submits it, a workflow adds them to the list file
   // (.github/workflows/apply-list-additions.yml); from anyone else it's an
   // ordinary suggestion. The body's format is parsed by
@@ -307,13 +308,15 @@
 
   // --- Settings ---------------------------------------------------------------
 
-  const DEFAULT_SETTINGS = { paused: false, disabledHosts: [] };
+  const DEFAULT_SETTINGS = { paused: false, disabledHosts: [], developerMode: false };
 
   const normalizeSettings = (s = {}) => ({
     paused: Boolean(s?.paused),
     disabledHosts: Array.isArray(s?.disabledHosts)
       ? s.disabledHosts.filter((h) => typeof h === "string")
       : [],
+    // Shows maintainer-only controls (submitting names to the project's lists).
+    developerMode: Boolean(s?.developerMode),
   });
 
   // --- Highlight style --------------------------------------------------------
