@@ -17,8 +17,11 @@ permissions:
   contents: write
   issues: write
 
+# One run per issue. (A single shared group would keep only one *pending* run,
+# so submitting three issues quickly would silently drop the middle one.) Runs
+# for different issues can overlap; the push below handles main having moved.
 concurrency:
-  group: list-additions
+  group: list-additions-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
@@ -97,12 +100,34 @@ jobs:
             -m "Add $COUNT name(s) to $FILE" \
             -m "From $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/$ISSUE"
 
-          # main may have moved while this ran.
-          if ! { git pull -q --rebase origin "$BRANCH" && git push -q origin "HEAD:$BRANCH"; }; then
+          # main may have moved while this ran (another list's issue, or you
+          # committing): put this commit on top of it and try again. Two issues
+          # appending to the same file at once can conflict; that one is
+          # reported so it can be retried by editing the issue.
+          result=failed
+          for attempt in 1 2 3 4 5; do
+            if ! git pull -q --rebase origin "$BRANCH"; then
+              git rebase --abort || true
+              result=conflict
+              break
+            fi
+            if git push -q origin "HEAD:$BRANCH"; then
+              result=pushed
+              break
+            fi
+            [ "$attempt" -lt 5 ] && sleep "$attempt"
+          done
+          if [ "$result" != pushed ]; then
             {
-              echo "The names passed the tests but I couldn't push to \`$BRANCH\` (is it protected?). Nothing was committed."
-              echo
-              echo "See the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+              if [ "$result" = conflict ]; then
+                echo "Another change to \`$FILE\` landed at the same moment and conflicted with this one. Nothing was committed."
+                echo
+                echo "Edit this issue (any small change) and I'll try again."
+              else
+                echo "The names passed the tests but I couldn't push to \`$BRANCH\` (is it protected?). Nothing was committed."
+                echo
+                echo "See the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+              fi
             } > "$RUNNER_TEMP/push-failed.md"
             reply "$RUNNER_TEMP/push-failed.md"
             exit 1

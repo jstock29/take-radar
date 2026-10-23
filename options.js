@@ -9,6 +9,7 @@ const {
   listEntries,
   starterOf,
   withoutNote,
+  problemWith,
   additionsIssueUrl,
   fetchList,
   toHex8,
@@ -155,6 +156,13 @@ function additionsBlock(list, { onEdit }) {
     const entries = list.added ?? [];
     const problem = (() => {
       if (!starter || !entries.length) return "";
+      // The same rules the workflow applies, so a bad line is caught here
+      // instead of in a comment on GitHub.
+      const unusable = entries.map((e) => [e, problemWith(e)]).filter(([, why]) => why);
+      if (unusable.length) {
+        const shown = (e) => (e.length > 40 ? `${e.slice(0, 40)}\u2026` : e);
+        return `Can\u2019t submit ${unusable.map(([e, why]) => `\u201c${shown(e)}\u201d ${why}`).join("; ")}`;
+      }
       const bare = starter.requireNotes ? withoutNote(entries) : [];
       if (bare.length) {
         return `Each name on this list needs a note saying who they are. Add one after a | for: ${bare.join(", ")}`;
@@ -889,17 +897,25 @@ ext.storage.onChanged.addListener((changes, area) => {
   if (changes.lists) {
     // Names change behind this page's back when a synced list refreshes or a
     // name is added from the right-click menu; take those in so the next
-    // save here doesn't overwrite them. Not while someone is typing in a box
-    // here (or a save of what they typed is pending): their text wins.
+    // save here doesn't overwrite them. A synced list's names and source are
+    // the background script's and can't be edited here, so they're always
+    // taken. Everything else waits while someone is typing in a box here (or
+    // a save of what they typed is pending): their text wins.
     const typing = saveTimer || (document.hasFocus() && document.activeElement?.tagName === "TEXTAREA");
     const contents = (l) => JSON.stringify([l.names, l.added, l.source]);
-    for (const stored of typing ? [] : (changes.lists.newValue ?? []).map(normalizeList)) {
+    for (const stored of (changes.lists.newValue ?? []).map(normalizeList)) {
       const mine = lists.find((l) => l.id === stored.id);
       if (!mine || contents(mine) === contents(stored)) continue;
-      mine.names = stored.names;
-      mine.source = stored.source;
-      if (stored.added) mine.added = stored.added;
-      else delete mine.added;
+      if (mine.source && stored.source) {
+        mine.names = stored.names;
+        mine.source = stored.source;
+      }
+      if (!typing) {
+        mine.names = stored.names;
+        mine.source = stored.source;
+        if (stored.added) mine.added = stored.added;
+        else delete mine.added;
+      }
       cardUpdaters.get(mine.id)?.();
     }
   }

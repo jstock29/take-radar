@@ -8,7 +8,7 @@ const path = require("node:path");
 
 require("../../shared.js");
 require("../../additions.js");
-const { STARTERS, additionsIssueUrl, parseListText, splitEntry } = globalThis.TakeRadar;
+const { STARTERS, additionsIssueUrl, parseListText, splitEntry, problemWith, MAX_ADDITIONS } = globalThis.TakeRadar;
 const script = import("../../scripts/apply-list-additions.mjs");
 
 const GOP = STARTERS.find((s) => s.id === "republican-operatives");
@@ -88,7 +88,7 @@ test("names already on the list, repeated, or unusable are reported, not added",
   assert.deepEqual(result.duplicates.map((d) => d.existing), ["Zoë O'Neil", "Jane Doe"]);
   assert.deepEqual(
     result.invalid.map((i) => i.problem),
-    ["would become a comment", "has no name", "the name has no letters", "is too long"],
+    ["would become a comment", "has no name", "has no letters", "is too long"],
   );
   // Only the one new name is in the file.
   assert.equal(parseListText(result.text).length, parseListText(LIST).length + 1);
@@ -148,4 +148,18 @@ test("the additions workflow only acts for the repository owner, and never puts 
   assert.match(yml, /^on:\n  issues:\n    types: \[opened, edited\]\n\npermissions:/m, "no other triggers");
   assert.match(yml, /^permissions:\n  contents: write\n  issues: write\n/m, "no broader permissions");
   assert.doesNotMatch(yml, /\$\{\{\s*github\.event\.issue\.(body|title)/, "the body is read from the event file");
+});
+
+test("the same line rules apply when submitting and when applying", () => {
+  assert.equal(problemWith("Jane Doe | pollster"), "");
+  assert.equal(problemWith("Ronald S. Sullivan Jr. | lawyer"), "");
+  assert.equal(problemWith("# Jane"), "would become a comment");
+  assert.equal(problemWith("| just a note"), "has no name");
+  assert.equal(problemWith("```"), "has no letters");
+  assert.equal(problemWith("x".repeat(81)), "is too long");
+  assert.equal(problemWith("Jane\u0007 Doe"), "contains control characters");
+
+  const entries = Array.from({ length: MAX_ADDITIONS + 1 }, (_, i) => `P${i}`);
+  assert.equal(additionsIssueUrl(GOP, entries), "", "more than the workflow takes");
+  assert.notEqual(additionsIssueUrl(GOP, entries.slice(1)), "");
 });

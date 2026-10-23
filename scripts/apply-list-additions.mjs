@@ -1,7 +1,7 @@
 // Adds the names in a "Submit new names" issue to the starter list it names.
 // Run by .github/workflows/apply-list-additions.yml for issues opened (or
 // edited) by the repository owner; the issue's body is built by
-// additionsIssueUrl() in shared.js and parsed here.
+// additionsIssueUrl() in additions.js and parsed here.
 //
 //   GITHUB_EVENT_PATH  the issue event (set by Actions)
 //   GITHUB_OUTPUT      receives status=skip|rejected|nothing|changed, file, count
@@ -15,23 +15,9 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 require("../shared.js");
 require("../additions.js");
-const { splitEntry, nameKey, ADDITIONS_MARKER } = globalThis.TakeRadar;
+const { splitEntry, nameKey, problemWith, ADDITIONS_MARKER, MAX_ADDITIONS } = globalThis.TakeRadar;
 
 export const SECTION = "# Added from the extension (move into a section above when convenient)";
-const MAX_ENTRIES = 100;
-const MAX_NAME = 80;
-const MAX_ENTRY = 300;
-
-/** Why a line can't go in a list file, or "" if it can. */
-export const problemWith = (entry) => {
-  const { name } = splitEntry(entry);
-  if (/[\u0000-\u001f\u007f]/.test(entry)) return "contains control characters";
-  if (!name) return "has no name";
-  if (name.startsWith("#")) return "would become a comment";
-  if (!/\p{L}/u.test(name)) return "the name has no letters";
-  if (name.length > MAX_NAME || entry.length > MAX_ENTRY) return "is too long";
-  return "";
-};
 
 /**
  * Read an additions issue body. Returns null if it isn't one, otherwise
@@ -54,7 +40,7 @@ export const parseIssue = (body, files) => {
     .map((l) => l.trim())
     .filter(Boolean);
   if (!entries.length) throw new Error("The code block has no names in it.");
-  if (entries.length > MAX_ENTRIES) throw new Error(`That's ${entries.length} names; I take at most ${MAX_ENTRIES} at a time.`);
+  if (entries.length > MAX_ADDITIONS) throw new Error(`That's ${entries.length} names; I take at most ${MAX_ADDITIONS} at a time.`);
   return { file, entries };
 };
 

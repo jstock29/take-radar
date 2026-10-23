@@ -23,6 +23,27 @@
 
   const MAX_SELECTION_WORDS = 6;
 
+  // What a list file can hold per line, and how many lines one submission may
+  // carry. The workflow that applies submissions (scripts/apply-list-additions.mjs)
+  // enforces the same limits.
+  const MAX_ADDITIONS = 100;
+  const MAX_NAME = 80;
+  const MAX_ENTRY = 300;
+
+  /**
+   * Why a line can't go in a list file, as a phrase to follow the line
+   * ("\u201c# x\u201d would become a comment"), or "" if it can.
+   */
+  const problemWith = (entry) => {
+    const { name } = splitEntry(entry);
+    if (/[\u0000-\u001f\u007f]/.test(entry)) return "contains control characters";
+    if (!name) return "has no name";
+    if (name.startsWith("#")) return "would become a comment";
+    if (!/\p{L}/u.test(name)) return "has no letters";
+    if (name.length > MAX_NAME || entry.length > MAX_ENTRY) return "is too long";
+    return "";
+  };
+
   /**
    * Turn text selected on a page into a name to add, or "" if it can't be
    * one (empty, no letters, a whole sentence, or something containing the
@@ -87,11 +108,12 @@
 
   /**
    * The address of a new issue asking for `entries` to be added to a starter
-   * list's file, or "" if there are too many to fit in an address.
+   * list's file, or "" if there are too many (or they won't fit in an address).
    */
   const additionsIssueUrl = (starter, entries) => {
     // Backticks would end the code block the names sit in.
     const lines = entries.map((e) => e.replace(/`/g, "'").replace(/\s+/g, " ").trim()).filter(Boolean);
+    if (lines.length > MAX_ADDITIONS) return "";
     const body = [
       `<!-- ${ADDITIONS_MARKER} -->`,
       `Names to add to \`${starter.file}\`, sent from the Take Radar extension.`,
@@ -111,6 +133,8 @@
     cleanSelection,
     addSelection,
     pruneAdded,
+    problemWith,
+    MAX_ADDITIONS,
     starterOf,
     withoutNote,
     additionsIssueUrl,

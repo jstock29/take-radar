@@ -142,16 +142,19 @@ function rebuildMenu() {
     const lists = await readLists();
     const key = JSON.stringify(lists.map((l) => [l.id, l.name]));
     if (key === menuKey) return;
-    menuKey = key;
     await ext.contextMenus.removeAll();
-    if (!lists.length) return;
-    const create = (props) =>
-      ext.contextMenus.create({ contexts: ["selection"], ...props }, () => void ext.runtime.lastError);
-    create({ id: MENU_ROOT, title: "Add to Take Radar list" });
-    for (const list of lists) {
-      create({ id: `${MENU_ROOT}:${list.id}`, parentId: MENU_ROOT, title: list.name || "Untitled" });
+    if (lists.length) {
+      const create = (props) =>
+        ext.contextMenus.create({ contexts: ["selection"], ...props }, () => void ext.runtime.lastError);
+      create({ id: MENU_ROOT, title: "Add to Take Radar list" });
+      for (const list of lists) {
+        create({ id: `${MENU_ROOT}:${list.id}`, parentId: MENU_ROOT, title: list.name || "Untitled" });
+      }
     }
-  }).catch(() => {});
+    menuKey = key; // only once built, so a failed rebuild is tried again
+  }).catch(() => {
+    menuKey = null;
+  });
   return menuQueue;
 }
 
@@ -172,13 +175,16 @@ const TOAST_TEXT = {
   duplicate: ({ name, listName }) => `“${name}” is already on ${listName}`,
   invalid: () => "Select just a person’s name to add it",
   missing: () => "That list no longer exists",
+  failed: () => "Couldn’t save that name",
 };
 
 // The page confirms in its top frame, whichever frame the selection was in.
 async function handleMenuClick(info, tab) {
   const id = String(info.menuItemId);
   if (!id.startsWith(`${MENU_ROOT}:`)) return;
-  const result = await addToList(id.slice(MENU_ROOT.length + 1), info.selectionText);
+  const result = await addToList(id.slice(MENU_ROOT.length + 1), info.selectionText).catch(() => ({
+    status: "failed",
+  }));
   if (tab?.id != null) {
     const text = TOAST_TEXT[result.status](result);
     ext.tabs.sendMessage(tab.id, { type: "toast", text }, { frameId: 0 })?.catch?.(() => {});

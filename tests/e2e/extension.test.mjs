@@ -583,6 +583,11 @@ test("Submit new names opens a pre-filled issue, but only once every operative h
   await panel.getByRole("button", { name: /Submit new names?/ }).click();
   assert.match(await panel.textContent(".added-block .sync-error"), /needs a note.*: Jane Doe$/);
 
+  // A line the workflow would refuse is caught here, naming the line.
+  await panel.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster\n# not a name | note");
+  await panel.getByRole("button", { name: /Submit new names?/ }).click();
+  assert.match(await panel.textContent(".added-block .sync-error"), /Can.t submit .# not a name \| note. would become a comment/);
+
   await panel.getByRole("textbox", { name: "Your additions" }).fill("Jane Doe | pollster\nJohn Roe | strategist");
   const url = await sendToGitHub(panel);
   assert.equal(url.origin + url.pathname, "https://github.com/jstock29/take-radar/issues/new");
@@ -697,5 +702,47 @@ test("the options page shows its version and an About panel, collapsed until ask
     ["https://github.com/jstock29/take-radar", "_blank", "noreferrer"],
     ["https://github.com/jstock29/take-radar/issues", "_blank", "noreferrer"],
   ]);
+  await panel.close();
+});
+
+test("adding from the page says so when it can't be saved, and the next add still works", async () => {
+  await reset();
+  const page = await openPage("/article.html");
+  await waitForHighlights(page, ["Jane Doe", "John Roe", "Ruth A. Okafor", "John Roe"]);
+
+  await worker.evaluate(() => {
+    globalThis.realSet = chrome.storage.local.set.bind(chrome.storage.local);
+    chrome.storage.local.set = () => Promise.reject(new Error("quota exceeded"));
+  });
+  try {
+    await pickFromMenu("people", "Sam Sample");
+    await toastText(page, "Couldn’t save that name");
+  } finally {
+    await worker.evaluate(() => (chrome.storage.local.set = globalThis.realSet));
+  }
+  assert.deepEqual((await getStorage("lists")).lists[0].names, PEOPLE.names, "nothing was half-saved");
+
+  await pickFromMenu("people", "Sam Sample");
+  await toastText(page, "Added “Sam Sample” to People");
+  assert.deepEqual((await getStorage("lists")).lists[0].names, [...PEOPLE.names, "Sam Sample"]);
+  await page.close();
+});
+
+test("a refresh that lands while you're typing in the panel isn't undone by your save", async () => {
+  listBody = "Pat Example | from the URL list\n";
+  await reset({ lists: [syncedList()] });
+  const panel = await openPanel();
+  await panel.click(".list .toggle");
+
+  // A save of this edit is pending (250ms) when the refresh finishes.
+  await panel.getByRole("textbox", { name: "Your additions" }).fill("Lee Tester");
+  listBody = "Pat Example | from the URL list\nNew Upstream | arrived mid-edit\n";
+  assert.equal((await refresh("synced"))["synced"], "ok");
+  await panel.waitForTimeout(600);
+
+  const { lists } = await getStorage("lists");
+  assert.deepEqual(lists[0].names, ["Pat Example | from the URL list", "New Upstream | arrived mid-edit"]);
+  assert.deepEqual(lists[0].added, ["Lee Tester"], "and what you typed is kept");
+  assert.equal(await panel.textContent(".list .count"), "3 names");
   await panel.close();
 });

@@ -80,8 +80,8 @@ for one first). When the repository owner submits that issue,
 `scripts/apply-list-additions.mjs`, which adds the names under an "Added from
 the extension" heading at the end of the list file, runs the unit tests (they
 enforce the list rules), commits to `main` and closes the issue. If the tests
-fail it comments with why and commits nothing; edit the issue to fix the
-names and it tries again. The extension drops the names from *Your additions*
+fail (or another change to the same list lands at the same moment) it
+comments with why and commits nothing; edit the issue and it tries again. The extension drops the names from *Your additions*
 the next time it refreshes the list.
 
 Issues from anyone else are never applied; they stay ordinary suggestions for
